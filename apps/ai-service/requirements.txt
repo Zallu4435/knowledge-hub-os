@@ -46,7 +46,9 @@ dataclasses-json==0.6.7
 datamodel-code-generator==0.25.4
     # via -r apps/ai-service/requirements.in
 dnspython==2.8.0
-    # via email-validator
+    # via
+    #   email-validator
+    #   pymongo
 email-validator==2.3.0
     # via pydantic
 fastapi==0.110.0
@@ -106,6 +108,8 @@ markupsafe==3.0.3
     # via jinja2
 marshmallow==3.26.2
     # via dataclasses-json
+motor==3.7.1
+    # via -r apps/ai-service/requirements.in
 multidict==6.7.1
     # via
     #   aiohttp
@@ -144,6 +148,8 @@ pydantic[email]==2.12.5
     #   langsmith
 pydantic-core==2.41.5
     # via pydantic
+pymongo==4.16.0
+    # via motor
 pytokens==0.4.1
     # via black
 pyyaml==6.0.3

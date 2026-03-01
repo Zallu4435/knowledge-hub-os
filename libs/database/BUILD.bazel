@@ -1,0 +1,16 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "database_lib",
+    srcs = ["src/prisma.service.ts"] + glob(["src/generated/**/*.d.ts"]),
+    data = glob(["src/generated/**/*"]),
+    declaration = True,
+    transpiler = "tsc",
+    deps = [
+        "//:node_modules/@nestjs/common",
+        "//:node_modules/@prisma/client",
+        "//:node_modules/reflect-metadata",
+    ],
+)

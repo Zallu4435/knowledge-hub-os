@@ -19,6 +19,8 @@ ts_project(
         "//libs/event_schemas:ts_contracts",
         "//:node_modules/kafkajs",
         "//:node_modules/@nestjs/microservices",
+        "//libs/database:database_lib",
+        "//:node_modules/@prisma/client",
     ],
 )
 

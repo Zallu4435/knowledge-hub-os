@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+  // Output the generated client locally so Bazel can cache it easily
+  output   = "./src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users") // Standard Postgres naming convention
+}

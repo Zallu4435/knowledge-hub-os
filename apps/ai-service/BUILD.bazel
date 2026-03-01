@@ -12,6 +12,7 @@ py_binary(
         requirement("uvicorn"),
         requirement("pydantic"),
         requirement("aiokafka"),
+        requirement("motor"),
         "//libs/event_schemas:py_contracts",
     ],
 )
