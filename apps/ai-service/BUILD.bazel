@@ -13,6 +13,23 @@ py_binary(
         requirement("pydantic"),
         requirement("aiokafka"),
         requirement("motor"),
+        requirement("python-dotenv"),
+        requirement("langchain"),
+        requirement("langchain-google-genai"),
+        requirement("email-validator"),
         "//libs/event_schemas:py_contracts",
+    ],
+)
+
+py_binary(
+    name = "test_ai",
+    srcs = ["test_ai.py"],
+    main = "test_ai.py",
+    deps = [
+        requirement("pydantic"),
+        requirement("python-dotenv"),
+        requirement("langchain"),
+        requirement("langchain-google-genai"),
+        requirement("email-validator"),
     ],
 )

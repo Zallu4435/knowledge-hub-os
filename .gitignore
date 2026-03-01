@@ -31,3 +31,15 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Bazel cache
+.bazel_cache/

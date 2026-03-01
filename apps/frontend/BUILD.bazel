@@ -1,0 +1,25 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+js_binary(
+    name = "dev",
+    data = glob([
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.css",
+        "**/*.json",
+    ]) + [
+        "//:node_modules/next",
+        "//:node_modules/react",
+        "//:node_modules/react-dom",
+        "//:node_modules/tailwindcss",
+        "//:node_modules/postcss",
+        "//:node_modules/autoprefixer",
+        "//libs/event_schemas:ts_contracts", # <-- The cross-language contract!
+    ],
+    entry_point = "next-cli.js",
+    args = ["dev", "apps/frontend", "-p", "4000"],
+    chdir = "apps/frontend", # Run the command from inside the frontend folder
+)

@@ -33,24 +33,28 @@ certifi==2026.2.25
     #   httpcore
     #   httpx
     #   requests
+cffi==2.0.0
+    # via cryptography
 charset-normalizer==3.4.4
     # via requests
 click==8.3.1
     # via
     #   black
     #   uvicorn
+cryptography==46.0.5
+    # via google-auth
 dataclasses-json==0.6.7
     # via
     #   langchain
     #   langchain-community
-datamodel-code-generator==0.25.4
+datamodel-code-generator==0.54.0
     # via -r apps/ai-service/requirements.in
 dnspython==2.8.0
     # via
     #   email-validator
     #   pymongo
 email-validator==2.3.0
-    # via pydantic
+    # via -r apps/ai-service/requirements.in
 fastapi==0.110.0
     # via -r apps/ai-service/requirements.in
 frozenlist==1.8.0
@@ -59,14 +63,48 @@ frozenlist==1.8.0
     #   aiosignal
 genson==1.3.0
     # via datamodel-code-generator
+google-ai-generativelanguage==0.6.4
+    # via google-generativeai
+google-api-core[grpc]==2.25.2
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-python-client
+    #   google-generativeai
+google-api-python-client==2.190.0
+    # via google-generativeai
+google-auth==2.49.0.dev0
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-core
+    #   google-api-python-client
+    #   google-auth-httplib2
+    #   google-generativeai
+google-auth-httplib2==0.3.0
+    # via google-api-python-client
+google-generativeai==0.5.4
+    # via langchain-google-genai
+googleapis-common-protos==1.72.0
+    # via
+    #   google-api-core
+    #   grpcio-status
 greenlet==3.3.2
     # via sqlalchemy
+grpcio==1.78.0
+    # via
+    #   google-api-core
+    #   grpcio-status
+grpcio-status==1.62.3
+    # via google-api-core
 h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
 httpcore==1.0.9
     # via httpx
+httplib2==0.31.2
+    # via
+    #   google-api-python-client
+    #   google-auth-httplib2
 httpx==0.28.1
     # via langsmith
 idna==3.11
@@ -76,9 +114,9 @@ idna==3.11
     #   httpx
     #   requests
     #   yarl
-inflect==5.6.2
+inflect==7.5.0
     # via datamodel-code-generator
-isort==5.13.2
+isort==7.0.0
     # via datamodel-code-generator
 jinja2==3.1.6
     # via datamodel-code-generator
@@ -96,7 +134,10 @@ langchain-core==0.1.53
     # via
     #   langchain
     #   langchain-community
+    #   langchain-google-genai
     #   langchain-text-splitters
+langchain-google-genai==1.0.4
+    # via -r apps/ai-service/requirements.in
 langchain-text-splitters==0.0.2
     # via langchain
 langsmith==0.1.147
@@ -108,6 +149,8 @@ markupsafe==3.0.3
     # via jinja2
 marshmallow==3.26.2
     # via dataclasses-json
+more-itertools==10.8.0
+    # via inflect
 motor==3.7.1
     # via -r apps/ai-service/requirements.in
 multidict==6.7.1
@@ -139,10 +182,30 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
-pydantic[email]==2.12.5
+proto-plus==1.27.1
     # via
+    #   google-ai-generativelanguage
+    #   google-api-core
+protobuf==4.25.8
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-core
+    #   google-generativeai
+    #   googleapis-common-protos
+    #   grpcio-status
+    #   proto-plus
+pyasn1==0.6.2
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==3.0
+    # via cffi
+pydantic==2.12.5
+    # via
+    #   -r apps/ai-service/requirements.in
     #   datamodel-code-generator
     #   fastapi
+    #   google-generativeai
     #   langchain
     #   langchain-core
     #   langsmith
@@ -150,6 +213,10 @@ pydantic-core==2.41.5
     # via pydantic
 pymongo==4.16.0
     # via motor
+pyparsing==3.3.2
+    # via httplib2
+python-dotenv==1.2.2
+    # via -r apps/ai-service/requirements.in
 pytokens==0.4.1
     # via black
 pyyaml==6.0.3
@@ -160,6 +227,7 @@ pyyaml==6.0.3
     #   langchain-core
 requests==2.32.5
     # via
+    #   google-api-core
     #   langchain
     #   langchain-community
     #   langsmith
@@ -177,18 +245,29 @@ tenacity==8.5.0
     #   langchain
     #   langchain-community
     #   langchain-core
+tomli==2.4.0
+    # via -r apps/ai-service/requirements.in
+tqdm==4.67.3
+    # via google-generativeai
+typeguard==4.5.1
+    # via inflect
 typing-extensions==4.15.0
     # via
     #   fastapi
+    #   google-generativeai
+    #   grpcio
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
+    #   typeguard
     #   typing-inspect
     #   typing-inspection
 typing-inspect==0.9.0
     # via dataclasses-json
 typing-inspection==0.4.2
     # via pydantic
+uritemplate==4.2.0
+    # via google-api-python-client
 urllib3==2.6.3
     # via requests
 uvicorn==0.27.1
