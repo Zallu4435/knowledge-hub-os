@@ -1,0 +1,62 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "schemas",
+    srcs = glob(["schemas/*.json"]),
+)
+
+# 1. TypeScript Generation Target
+genrule(
+    name = "generate_ts_contracts",
+    srcs = ["schemas/user.created.json", "generate_ts.js"],
+    outs = ["UserCreatedEvent.ts"],
+    cmd = "node $(location generate_ts.js) $(location schemas/user.created.json) $(location UserCreatedEvent.ts)",
+)
+
+# 2. Python Generation Target Wrapper
+# This links the @pip dependency hermetically!
+py_binary(
+    name = "generate_py_bin",
+    srcs = ["generate_py.py"],
+    main = "generate_py.py",
+    deps = ["@pip//datamodel_code_generator"],
+)
+
+genrule(
+    name = "generate_py_contracts",
+    srcs = ["schemas/user.created.json"],
+    outs = ["user_created_event.py"],
+    tools = [":generate_py_bin"],
+    cmd = "$(location :generate_py_bin) $(location schemas/user.created.json) $(location user_created_event.py)",
+)
+
+# 3. Master Alias to run both
+filegroup(
+    name = "generate_contracts",
+    srcs = [":generate_ts_contracts", ":generate_py_contracts"],
+)
+
+# 1. Package the generated Python file as a python library
+py_library(
+    name = "py_contracts",
+    srcs = [
+        "__init__.py",
+        "//libs:__init__.py",
+        ":generate_py_contracts"
+    ], # Takes the output from our genrule
+    imports = ["."], # Allows python to import it easily
+    deps = ["@pip//pydantic"], # The generated file relies on Pydantic
+)
+
+# 2. Package the generated TypeScript file as a TS library
+ts_project(
+    name = "ts_contracts",
+    srcs = ["UserCreatedEvent.ts"], # Takes the output from our genrule
+    tsconfig = "tsconfig.json",
+    declaration = True,
+    transpiler = "tsc",
+)
+

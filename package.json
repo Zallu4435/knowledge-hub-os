@@ -1,0 +1,25 @@
+{
+  "name": "knowledge-hub-os",
+  "private": true,
+  "packageManager": "pnpm@8.15.0",
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.3",
+    "json-schema-to-typescript": "^15.0.4",
+    "ts-node": "^10.9.2",
+    "typescript": "5.2.2"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.14",
+    "@nestjs/core": "^11.1.14",
+    "@nestjs/microservices": "^11.1.14",
+    "@nestjs/platform-express": "^11.1.14",
+    "kafkajs": "^2.2.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  }
+}

@@ -1,0 +1,18 @@
+# Enable Bzlmod (Modern dependency management)
+common --enable_bzlmod
+
+# Terminal UI improvements
+build --color=yes
+build --show_progress_rate_limit=0.2
+
+# Node.js / rules_js specific configurations
+# This prevents Bazel from getting confused by Next.js/NestJS symlinks
+build --symlink_prefix=/
+build --experimental_convenience_symlinks=ignore
+
+# Strict visibility - prevents apps from secretly depending on each other
+build --check_visibility=true
+# Required by aspect_rules_ts: Skip type-checking for .d.ts files in node_modules
+build --@aspect_rules_ts//ts:skipLibCheck=always
+fetch --@aspect_rules_ts//ts:skipLibCheck=always
+query --@aspect_rules_ts//ts:skipLibCheck=always

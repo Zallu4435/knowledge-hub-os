@@ -1,0 +1,32 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@aspect_rules_js//js:defs.bzl", "js_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "compile",
+    srcs = glob(["src/**/*.ts"]),
+    tsconfig = "tsconfig.json",
+    declaration = True,
+    transpiler = "tsc",
+    deps = [
+        "//:node_modules/@nestjs/common",
+        "//:node_modules/@nestjs/core",
+        "//:node_modules/@nestjs/platform-express",
+        "//:node_modules/reflect-metadata",
+        "//:node_modules/rxjs",
+        "//:node_modules/@types/node",
+        "//libs/event_schemas:ts_contracts",
+        "//:node_modules/kafkajs",
+        "//:node_modules/@nestjs/microservices",
+    ],
+)
+
+js_binary(
+    name = "api-gateway",
+    data = [
+        ":compile",
+        "//:node_modules/reflect-metadata",
+    ],
+    entry_point = "src/main.js",
+)
