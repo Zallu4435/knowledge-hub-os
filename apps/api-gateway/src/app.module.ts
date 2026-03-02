@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { JwtModule } from '@nestjs/jwt';
 import { AppController } from './app.controller';
-import { PrismaService } from '../../../libs/database/src/prisma.service'; // Add this
+import { PrismaService } from '../../../libs/database/src/prisma.service';
 
 @Module({
   imports: [
+    JwtModule.register({ global: true }),
     ClientsModule.register([{
       name: 'KAFKA_SERVICE',
       transport: Transport.KAFKA,
@@ -15,6 +17,6 @@ import { PrismaService } from '../../../libs/database/src/prisma.service'; // Ad
     }]),
   ],
   controllers: [AppController],
-  providers: [PrismaService], // Add this
+  providers: [PrismaService],
 })
 export class AppModule { }

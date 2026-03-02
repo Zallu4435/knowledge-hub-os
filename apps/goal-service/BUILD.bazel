@@ -1,0 +1,43 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@aspect_rules_js//js:defs.bzl", "js_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "compile",
+    srcs = glob(["src/**/*.ts"]),
+    declaration = True,
+    resolve_json_module = True,
+    transpiler = "tsc",
+    tsconfig = "tsconfig.json",
+    deps = [
+        "//:node_modules/@nestjs/common",
+        "//:node_modules/@nestjs/core",
+        "//:node_modules/@nestjs/jwt",
+        "//:node_modules/@nestjs/microservices",
+        "//:node_modules/@types/node",
+        "//:node_modules/@types/express",
+        "//libs/database:database_lib",
+        "//libs/security:security_lib",
+    ],
+)
+
+js_binary(
+    name = "goal-service",
+    data = [
+        ":compile",
+        "//:node_modules/@nestjs/common",
+        "//:node_modules/@nestjs/core",
+        "//:node_modules/@nestjs/jwt",
+        "//:node_modules/@nestjs/microservices",
+        "//libs/database:database_lib",
+        "//libs/security:security_lib",
+        "//:node_modules/@prisma/client",
+        "//:node_modules/reflect-metadata",
+    ],
+    entry_point = "src/main.js",
+    chdir = package_name(),
+    env = {
+        "DATABASE_URL": "postgresql://neondb_owner:npg_qKAGa3H1PbvU@ep-curly-mode-aieehupq-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+    },
+)

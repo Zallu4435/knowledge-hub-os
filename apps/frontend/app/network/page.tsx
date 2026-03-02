@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import InputField from "../../components/ui/InputField";
+import Button from "../../components/ui/Button";
+import { apiClient } from "../../lib/api";
 
 export default function NetworkPage() {
     const [email, setEmail] = useState("");
@@ -25,16 +28,9 @@ export default function NetworkPage() {
         };
 
         try {
-            const res = await fetch("http://localhost:3000/users", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+            const res = await apiClient.post("/gateway/users", payload);
 
-            if (!res.ok) throw new Error("Gateway rejected the payload");
-
-            const data = await res.json();
-            setLog(`✅ Success! DB ID: ${data.db_id}`);
+            setLog(`✅ Success! DB ID: ${res.data.db_id}`);
             setStatus("success");
             setEmail("");
         } catch (err: any) {
@@ -52,37 +48,33 @@ export default function NetworkPage() {
 
             <div className="bg-surface p-8 rounded-2xl border border-zinc-800 shadow-xl">
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-textMuted mb-2">User Email</label>
-                        <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-background border border-zinc-800 rounded-lg px-4 py-3 text-textMain focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                            placeholder="akash@knowledgehub.os"
-                        />
-                    </div>
+                    <InputField
+                        label="User Email"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="[EMAIL_ADDRESS]"
+                    />
 
-                    <div>
-                        <label className="block text-sm font-medium text-textMuted mb-2">System Role</label>
-                        <input
-                            type="text"
-                            required
-                            value={role}
-                            onChange={(e) => setRole(e.target.value)}
-                            className="w-full bg-background border border-zinc-800 rounded-lg px-4 py-3 text-textMain focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                            placeholder="e.g. Senior DevOps Engineer"
-                        />
-                    </div>
+                    <InputField
+                        label="System Role"
+                        type="text"
+                        required
+                        value={role}
+                        onChange={(e) => setRole(e.target.value)}
+                        placeholder="e.g. Senior DevOps Engineer"
+                    />
 
-                    <button
+                    <Button
                         type="submit"
                         disabled={status === "loading"}
-                        className="w-full bg-primary hover:bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+                        variant="primary"
+                        size="lg"
+                        fullWidth
                     >
                         {status === "loading" ? "Processing..." : "Onboard User"}
-                    </button>
+                    </Button>
                 </form>
 
                 {log && (

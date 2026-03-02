@@ -11,9 +11,10 @@ filegroup(
 # 1. TypeScript Generation Target
 genrule(
     name = "generate_ts_contracts",
-    srcs = ["schemas/user.created.json", "generate_ts.js"],
-    outs = ["UserCreatedEvent.ts"],
-    cmd = "node $(location generate_ts.js) $(location schemas/user.created.json) $(location UserCreatedEvent.ts)",
+    srcs = ["schemas/user.created.json", "schemas/task.completed.json", "generate_ts.js"],
+    outs = ["UserCreatedEvent.ts", "TaskCompletedEvent.ts"],
+    cmd = "node $(location generate_ts.js) $(location schemas/user.created.json) $(location UserCreatedEvent.ts) && " +
+          "node $(location generate_ts.js) $(location schemas/task.completed.json) $(location TaskCompletedEvent.ts)",
 )
 
 # 2. Python Generation Target Wrapper
@@ -27,10 +28,11 @@ py_binary(
 
 genrule(
     name = "generate_py_contracts",
-    srcs = ["schemas/user.created.json"],
-    outs = ["user_created_event.py"],
+    srcs = ["schemas/user.created.json", "schemas/task.completed.json"],
+    outs = ["user_created_event.py", "task_completed_event.py"],
     tools = [":generate_py_bin"],
-    cmd = "$(location :generate_py_bin) $(location schemas/user.created.json) $(location user_created_event.py)",
+    cmd = "$(location :generate_py_bin) $(location schemas/user.created.json) $(location user_created_event.py) && " +
+          "$(location :generate_py_bin) $(location schemas/task.completed.json) $(location task_completed_event.py)",
 )
 
 # 3. Master Alias to run both
@@ -54,7 +56,7 @@ py_library(
 # 2. Package the generated TypeScript file as a TS library
 ts_project(
     name = "ts_contracts",
-    srcs = ["UserCreatedEvent.ts"], # Takes the output from our genrule
+    srcs = ["UserCreatedEvent.ts", "TaskCompletedEvent.ts"], # Takes the output from our genrule
     tsconfig = "tsconfig.json",
     declaration = True,
     transpiler = "tsc",

@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  // Output the generated client locally so Bazel can cache it easily
   output   = "./src/generated"
 }
 
@@ -12,9 +11,38 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
+  password  String?
   role      String   @default("user")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("users") // Standard Postgres naming convention
+  // A User can have many goals
+  goals Goal[]
+
+  @@map("users")
+}
+
+model Goal {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("goals")
+}
+
+model Task {
+  id        String   @id @default(uuid())
+  title     String
+  status    String   @default("TODO") // Statuses: TODO, IN_PROGRESS, DONE
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tasks")
 }

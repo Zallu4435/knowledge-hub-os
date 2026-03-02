@@ -1,21 +1,27 @@
-import { Controller, Post, Body, Inject, OnModuleInit } from '@nestjs/common';
+import { Controller, Post, Body, Inject, OnModuleInit, UseGuards, Req } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { UserCreatedEvent } from '../../../libs/event_schemas/UserCreatedEvent';
 import { PrismaService } from '../../../libs/database/src/prisma.service';
+import { JwtAuthGuard } from '../../../libs/security/src/jwt-auth.guard'; // Import Guard
 
 @Controller('users')
 export class AppController implements OnModuleInit {
   constructor(
     @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka,
-    private readonly prisma: PrismaService, // Inject Prisma
+    private readonly prisma: PrismaService,
   ) { }
 
   async onModuleInit() {
     await this.kafkaClient.connect();
   }
 
+  // 🔒 THIS ROUTE IS NOW PROTECTED
+  @UseGuards(JwtAuthGuard)
   @Post()
-  async createUser(@Body() event: UserCreatedEvent) {
+  async createUser(@Body() event: UserCreatedEvent, @Req() request: any) {
+    // request.user now contains the verified JWT payload!
+    console.log(`Verified Request from User: ${request.user.email}`);
+
     // 1. Persist to Neon Postgres
     const user = await this.prisma.user.create({
       data: {
@@ -30,7 +36,7 @@ export class AppController implements OnModuleInit {
     this.kafkaClient.emit('user.events', event);
 
     return {
-      status: 'User Created & Published',
+      status: 'Secure Request Processed',
       db_id: user.id,
       kafka_eventId: event.eventId
     };

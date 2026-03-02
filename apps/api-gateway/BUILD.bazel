@@ -21,6 +21,9 @@ ts_project(
         "//:node_modules/@nestjs/microservices",
         "//libs/database:database_lib",
         "//:node_modules/@prisma/client",
+        "//libs/security:security_lib",
+        "//:node_modules/@nestjs/jwt",
+        "//:node_modules/@types/express",
     ],
 )
 
@@ -29,6 +32,14 @@ js_binary(
     data = [
         ":compile",
         "//:node_modules/reflect-metadata",
+        "//:node_modules/@prisma/client",
+        "//libs/security:security_lib",
+        "//:node_modules/@nestjs/jwt",
     ],
     entry_point = "src/main.js",
+    env = {
+        "DATABASE_URL": "postgresql://neondb_owner:npg_qKAGa3H1PbvU@ep-curly-mode-aieehupq-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+        "MONGO_URI": "mongodb+srv://nazalzallu123:nazalzallu123@cluster0.uvy4n.mongodb.net/?appName=Cluster0",
+        "GEMINI_API_KEY": "AIzaSyAGpDTRrg-auvQI4Sjybpauzuq6uPMDwZ4",
+    },
 )

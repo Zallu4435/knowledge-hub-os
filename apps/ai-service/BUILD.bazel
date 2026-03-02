@@ -17,8 +17,10 @@ py_binary(
         requirement("langchain"),
         requirement("langchain-google-genai"),
         requirement("email-validator"),
+        requirement("PyJWT"),
         "//libs/event_schemas:py_contracts",
     ],
+    data = ["//:.env"],
 )
 
 py_binary(
