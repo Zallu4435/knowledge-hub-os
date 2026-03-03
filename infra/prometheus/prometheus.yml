@@ -1,0 +1,95 @@
+# ============================================================
+# Prometheus Scrape Configuration — Knowledge Hub OS
+# ============================================================
+# Prometheus scrapes /metrics from every service every 15s.
+# All containers must expose a /metrics endpoint.
+# ============================================================
+
+global:
+  scrape_interval: 15s       # How often Prometheus polls each target
+  evaluation_interval: 15s   # How often alerting rules are evaluated
+  external_labels:
+    project: "knowledge-hub-os"
+    environment: "production"
+
+# ─────────────────────────────────────────────
+# ALERTING (optional — extend later)
+# ─────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# ─────────────────────────────────────────────
+# SCRAPE TARGETS
+# Each job maps to one service in docker-compose.
+# ─────────────────────────────────────────────
+scrape_configs:
+
+  # ── Prometheus self-monitoring ──────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── NestJS API Gateway ──────────────────────
+  # Exposed at http://api-gateway:3000/metrics by prom-client
+  - job_name: "api-gateway"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api-gateway:3000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "api-gateway"
+
+  # ── NestJS Auth Service ──────────────────────
+  - job_name: "auth-service"
+    metrics_path: "/auth/metrics"
+    static_configs:
+      - targets: ["auth-service:3001"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "auth-service"
+
+  # ── NestJS Goal Service ──────────────────────
+  - job_name: "goal-service"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["goal-service:3002"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "goal-service"
+
+  # ── Python FastAPI AI Service ────────────────
+  # Exposed at http://ai-service:8000/metrics by prometheus-fastapi-instrumentator
+  - job_name: "ai-service"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["ai-service:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "ai-service"
+
+  # ── Redpanda (Kafka) Broker ───────────────────
+  # Redpanda exposes Prometheus-compatible metrics on port 9644
+  - job_name: "redpanda"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["redpanda:9644"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "redpanda-broker"
+
+  # ── Redis ─────────────────────────────────────
+  # redis-exporter sidecar publishes metrics on port 9121
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "redis"

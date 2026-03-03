@@ -3,6 +3,12 @@ import { AuthModule } from './auth.module';
 import { GlobalExceptionFilter } from '../../../libs/exceptions/src/global-exception.filter';
 import { Logger } from 'nestjs-pino';
 
+// ─────────────────────────────────────────────────────────────
+// Phase 12 — OpenTelemetry Tracing (MUST be first import)
+// Patches http/kafkajs before NestJS loads any modules.
+// ─────────────────────────────────────────────────────────────
+import '../../../libs/telemetry/src/tracer';
+
 async function bootstrap() {
   const app = await NestFactory.create(AuthModule, { bufferLogs: true });
 

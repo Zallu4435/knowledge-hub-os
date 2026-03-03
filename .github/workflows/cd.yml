@@ -1,0 +1,98 @@
+# ============================================================
+# .github/workflows/cd.yml — Continuous Deployment to Oracle Cloud
+#
+# Triggers AFTER the ci.yml push job succeeds (images are in GHCR).
+# SSH's into the Oracle VM and runs deploy.sh.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   ORACLE_VM_IP       — Public IP of your Oracle Cloud VM (e.g. 129.154.200.123)
+#   ORACLE_SSH_KEY     — Contents of your SSH private key file (the .key file
+#                        you downloaded when creating the Oracle VM)
+#                        Paste the full multi-line key content.
+#   GITHUB_ORG         — Your GitHub username or org name (for GHCR image tags)
+# ============================================================
+
+name: CD — Deploy to Oracle Cloud
+
+on:
+  # Trigger automatically after ci.yml completes its "push" job on main
+  workflow_run:
+    workflows: ["CI/CD — Test, Build & Push"]
+    types: [completed]
+    branches: [main]
+
+  # Allow manual one-click deploy from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual deploy"
+        required: false
+        default: "Manual trigger"
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to Oracle Cloud VM
+    runs-on: ubuntu-22.04
+    # Only deploy if the CI workflow actually succeeded (not cancelled/failed)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout (for deploy.sh)
+        uses: actions/checkout@v4
+
+      # ── Set up SSH agent with Oracle VM private key ───────────
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ORACLE_SSH_KEY }}
+
+      # ── Add Oracle VM to known_hosts to prevent host-key prompt
+      - name: Add Oracle VM to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.ORACLE_VM_IP }}" >> ~/.ssh/known_hosts
+
+      # ── Copy deploy.sh to server if it changed ────────────────
+      - name: Upload deploy.sh
+        run: |
+          scp deploy.sh ubuntu@${{ secrets.ORACLE_VM_IP }}:~/knowledge-hub-os/deploy.sh
+          ssh ubuntu@${{ secrets.ORACLE_VM_IP }} "chmod +x ~/knowledge-hub-os/deploy.sh"
+
+      # ── Log into GHCR on the remote server ───────────────────
+      # Uses the built-in GITHUB_TOKEN — no extra secret needed
+      - name: Authenticate GHCR on remote server
+        run: |
+          ssh ubuntu@${{ secrets.ORACLE_VM_IP }} \
+            "echo '${{ secrets.GITHUB_TOKEN }}' | \
+             docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      # ── Run the rolling deploy script ────────────────────────
+      - name: Run deploy.sh on Oracle VM
+        env:
+          VM_IP: ${{ secrets.ORACLE_VM_IP }}
+          GITHUB_ORG: ${{ secrets.GITHUB_ORG }}
+        run: |
+          ssh ubuntu@"$VM_IP" \
+            "cd ~/knowledge-hub-os && GITHUB_ORG='$GITHUB_ORG' bash deploy.sh"
+
+      # ── Post a deployment summary ─────────────────────────────
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "## 🚀 Deployed to Oracle Cloud" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **App URL** | http://${{ secrets.ORACLE_VM_IP }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **API URL** | http://${{ secrets.ORACLE_VM_IP }}/api |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "## ❌ Deployment FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above. To rollback, re-run the previous successful CD run." >> $GITHUB_STEP_SUMMARY

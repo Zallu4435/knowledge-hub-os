@@ -1,0 +1,18 @@
+# ============================================================
+# Grafana — Dashboard Provisioning
+# This tells Grafana where to find pre-built JSON dashboards.
+# ============================================================
+
+apiVersion: 1
+
+providers:
+  - name: "Knowledge Hub OS"
+    orgId: 1
+    folder: "Knowledge Hub OS"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

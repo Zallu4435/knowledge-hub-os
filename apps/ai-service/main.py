@@ -22,6 +22,17 @@ from tenacity import (
     RetryError,
 )
 
+# Phase 12 — OpenTelemetry tracing for Python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import Resource
+
+# Phase 12 — Prometheus metrics for FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator as PrometheusInstrumentator
+
 # Import our strict contracts
 from libs.event_schemas.user_created_event import UserCreatedEvent
 from libs.event_schemas.task_completed_event import TaskCompletedEvent
@@ -92,6 +103,20 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# =============================================================================
+# Phase 12 — Bootstrap OpenTelemetry SDK
+# Sends trace spans to Jaeger via OTLP/HTTP (env: OTEL_EXPORTER_OTLP_ENDPOINT)
+# =============================================================================
+_otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+_service_name = os.getenv("OTEL_SERVICE_NAME", "ai-service")
+
+_otel_resource = Resource(attributes={"service.name": _service_name})
+_tracer_provider = TracerProvider(resource=_otel_resource)
+_otlp_exporter = OTLPSpanExporter(endpoint=f"{_otel_endpoint}/v1/traces")
+_tracer_provider.add_span_processor(BatchSpanProcessor(_otlp_exporter))
+trace.set_tracer_provider(_tracer_provider)
+tracer = trace.get_tracer(__name__)
+
 app = FastAPI(title="Knowledge Hub OS - AI Brain")
 
 # Phase 1.2: Enforce CORS in FastAPI
@@ -103,6 +128,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Phase 12 — Wire OTEL auto-instrumentation (must be done after app is created)
+FastAPIInstrumentor.instrument_app(app, tracer_provider=_tracer_provider)
+
+# Phase 12 — Mount Prometheus /metrics endpoint
+# Instrumentator automatically tracks request count, latency histograms, in-flight, etc.
+PrometheusInstrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # =============================================================================
 # LLM Initialization Helper (created per-request to avoid loop mismatch)
@@ -245,14 +277,31 @@ async def consume_kafka():
     coach_chain = coach_prompt | llm
 
     # Phase 1.1: Use KAFKA_BROKER_URL env var
+    # ── Kafka connection params — SASL for Upstash, plain for local Redpanda ──
+    _kafka_sasl_username = os.getenv("KAFKA_SASL_USERNAME", "")
+    _kafka_sasl_password = os.getenv("KAFKA_SASL_PASSWORD", "")
+    _kafka_security_protocol = "SASL_SSL" if _kafka_sasl_username else "PLAINTEXT"
+    _kafka_sasl_mechanism   = "SCRAM-SHA-256" if _kafka_sasl_username else "PLAIN"
+
     consumer = AIOKafkaConsumer(
         "user.events",
         "task.completed",
         bootstrap_servers=KAFKA_BROKER_URL,
         group_id="ai-service-group",
+        security_protocol=_kafka_security_protocol,
+        sasl_mechanism=_kafka_sasl_mechanism,
+        sasl_plain_username=_kafka_sasl_username,
+        sasl_plain_password=_kafka_sasl_password,
+        auto_offset_reset="latest",
     )
-    # Phase 2.2: DLQ producer
-    dlq_producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BROKER_URL)
+    # Phase 2.2: DLQ producer — same auth settings
+    dlq_producer = AIOKafkaProducer(
+        bootstrap_servers=KAFKA_BROKER_URL,
+        security_protocol=_kafka_security_protocol,
+        sasl_mechanism=_kafka_sasl_mechanism,
+        sasl_plain_username=_kafka_sasl_username,
+        sasl_plain_password=_kafka_sasl_password,
+    )
 
     await consumer.start()
     await dlq_producer.start()
@@ -357,5 +406,6 @@ async def startup_event():
 
 
 if __name__ == "__main__":
-    ai_port = int(os.getenv("PORT_AI_SERVICE", "8000"))
+    # Render injects PORT; fall back to PORT_AI_SERVICE for local dev
+    ai_port = int(os.getenv("PORT", os.getenv("PORT_AI_SERVICE", "8000")))
     uvicorn.run(app, host="0.0.0.0", port=ai_port)

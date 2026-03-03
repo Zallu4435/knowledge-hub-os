@@ -1,0 +1,278 @@
+# ============================================================
+# Knowledge Hub OS — CI/CD Pipeline
+# Trigger: Every push to main or pull_request targeting main
+#
+# Jobs:
+#   1. test      — Run Bazel tests for every app + lib
+#   2. build     — Build all Docker images via Bazel oci_tarball
+#   3. push      — Push images to GitHub Container Registry (GHCR)
+#
+# Required repository secrets:
+#   GHCR_TOKEN  — GitHub Personal Access Token (scope: write:packages)
+#                 (or use: secrets.GITHUB_TOKEN — already available)
+# ============================================================
+
+name: CI/CD — Test, Build & Push
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# ──────────────────────────────────────────────
+# Concurrency: cancel any in-progress run for
+# the same branch/PR when a new one starts.
+# ──────────────────────────────────────────────
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/knowledge-hub-os
+
+# ──────────────────────────────────────────────────────────────────
+# JOB 1 — TEST
+# Run Bazel tests in parallel for all packages
+# ──────────────────────────────────────────────────────────────────
+jobs:
+  test:
+    name: 🧪 Bazel Tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Cache Bazel's build outputs (~/.cache/bazel) to dramatically speed up
+      # subsequent runs. Cache key is based on the Bazel lockfile.
+      - name: Cache Bazel output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-
+
+      - name: Set up Bazelisk
+        uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          # Use .bazelversion file in the repo root
+          bazelisk-version: "1.20.0"
+
+      - name: Set up Node.js 20 (for pnpm & ts-node outside Bazel)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "8.15.0"
+          run_install: true
+
+      - name: Set up Python 3.11 (for ai-service tests)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          # Key on requirements.txt (the locked/pinned file), NOT requirements.in
+          # requirements.in is the abstract spec; requirements.txt is the resolved lock
+          cache-dependency-path: apps/ai-service/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r apps/ai-service/requirements.txt
+        working-directory: ${{ github.workspace }}
+
+      # ── Run all Bazel tests ───────────────────────────────
+      - name: Run all Bazel tests
+        run: |
+          bazel test \
+            --test_output=errors \
+            --keep_going \
+            //...
+
+      # ── Python tests via pytest as a fallback ─────────────
+      - name: Run Python unit tests (ai-service)
+        run: python -m pytest apps/ai-service/test_ai.py -v
+        working-directory: ${{ github.workspace }}
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2 — BUILD
+  # Build all OCI images via Bazel and save as tarballs
+  # ──────────────────────────────────────────────────────────
+  build:
+    name: 🏗️ Bazel Docker Build
+    runs-on: ubuntu-22.04
+    needs: test          # Only build if tests pass
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Bazel output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-
+
+      - name: Set up Bazelisk
+        uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-version: "1.20.0"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "8.15.0"
+          run_install: false
+
+      # Cache pnpm store to avoid re-downloading packages across runs
+      - name: Get pnpm store directory
+        id: pnpm-cache-dir
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache-dir.outputs.dir }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install Node.js dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Build every service tarball ────────────────────────
+      - name: Build — api-gateway image
+        run: bazel build //apps/api-gateway:tarball
+
+      - name: Build — auth-service image
+        run: bazel build //apps/auth-service:tarball
+
+      - name: Build — goal-service image
+        run: bazel build //apps/goal-service:tarball
+
+      - name: Build — ai-service image
+        run: bazel build //apps/ai-service:tarball
+
+      - name: Build — frontend image
+        run: bazel build //apps/frontend:tarball
+
+      # ── Upload tarballs so the push job can use them ───────
+      # We copy them out of the Bazel output tree first
+      - name: Collect tarballs
+        run: |
+          mkdir -p /tmp/docker-images
+          for service in api-gateway auth-service goal-service ai-service frontend; do
+            bazel cquery --output=files //apps/${service}:tarball \
+              | xargs -I{} cp {} /tmp/docker-images/${service}.tar
+          done
+
+      - name: Upload image tarballs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp/docker-images/
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 3 — PUSH (only on pushes to main, not PRs)
+  # Load the tarballs and push images to GHCR
+  # ──────────────────────────────────────────────────────────
+  push:
+    name: 🚀 Push Images to GHCR
+    runs-on: ubuntu-22.04
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      packages: write    # Required to push to ghcr.io
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download image tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp/docker-images/
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Determine image tag ────────────────────────────────
+      # Tags: latest (for every push to main) +
+      #       short SHA (for traceability, e.g. sha-a1b2c3d)
+      - name: Compute image tag
+        id: tag
+        # Use ${GITHUB_SHA::7} in bash (not via expression) to avoid shell injection risk
+        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # ── Load + re-tag + push each image ───────────────────
+      - name: Push api-gateway
+        run: |
+          docker load < /tmp/docker-images/api-gateway.tar
+          docker tag knowledgehub/api-gateway:latest ${{ env.IMAGE_PREFIX }}/api-gateway:latest
+          docker tag knowledgehub/api-gateway:latest ${{ env.IMAGE_PREFIX }}/api-gateway:${{ steps.tag.outputs.sha }}
+          docker push ${{ env.IMAGE_PREFIX }}/api-gateway:latest
+          docker push ${{ env.IMAGE_PREFIX }}/api-gateway:${{ steps.tag.outputs.sha }}
+
+      - name: Push auth-service
+        run: |
+          docker load < /tmp/docker-images/auth-service.tar
+          docker tag knowledgehub/auth-service:latest ${{ env.IMAGE_PREFIX }}/auth-service:latest
+          docker tag knowledgehub/auth-service:latest ${{ env.IMAGE_PREFIX }}/auth-service:${{ steps.tag.outputs.sha }}
+          docker push ${{ env.IMAGE_PREFIX }}/auth-service:latest
+          docker push ${{ env.IMAGE_PREFIX }}/auth-service:${{ steps.tag.outputs.sha }}
+
+      - name: Push goal-service
+        run: |
+          docker load < /tmp/docker-images/goal-service.tar
+          docker tag knowledgehub/goal-service:latest ${{ env.IMAGE_PREFIX }}/goal-service:latest
+          docker tag knowledgehub/goal-service:latest ${{ env.IMAGE_PREFIX }}/goal-service:${{ steps.tag.outputs.sha }}
+          docker push ${{ env.IMAGE_PREFIX }}/goal-service:latest
+          docker push ${{ env.IMAGE_PREFIX }}/goal-service:${{ steps.tag.outputs.sha }}
+
+      - name: Push ai-service
+        run: |
+          docker load < /tmp/docker-images/ai-service.tar
+          docker tag knowledgehub/ai-service:latest ${{ env.IMAGE_PREFIX }}/ai-service:latest
+          docker tag knowledgehub/ai-service:latest ${{ env.IMAGE_PREFIX }}/ai-service:${{ steps.tag.outputs.sha }}
+          docker push ${{ env.IMAGE_PREFIX }}/ai-service:latest
+          docker push ${{ env.IMAGE_PREFIX }}/ai-service:${{ steps.tag.outputs.sha }}
+
+      - name: Push frontend
+        run: |
+          docker load < /tmp/docker-images/frontend.tar
+          docker tag knowledgehub/frontend:latest ${{ env.IMAGE_PREFIX }}/frontend:latest
+          docker tag knowledgehub/frontend:latest ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.tag.outputs.sha }}
+          docker push ${{ env.IMAGE_PREFIX }}/frontend:latest
+          docker push ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.tag.outputs.sha }}
+
+      # ── Deployment summary ────────────────────────────────
+      - name: Deployment summary
+        run: |
+          echo "## ✅ Images pushed to GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Tag |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          for svc in api-gateway auth-service goal-service ai-service frontend; do
+            echo "| ${svc} | \`${{ steps.tag.outputs.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Registry: \`${{ env.REGISTRY }}/${{ github.repository_owner }}/knowledge-hub-os\`" >> $GITHUB_STEP_SUMMARY

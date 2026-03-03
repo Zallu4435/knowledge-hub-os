@@ -1,8 +1,28 @@
-import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards, Inject, OnModuleInit } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Req, Res, UseGuards, Inject, OnModuleInit } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { PrismaService } from '../../../libs/database/src/prisma.service';
 import { JwtAuthGuard } from '../../../libs/security/src/jwt-auth.guard';
 import * as crypto from 'crypto';
+import { Response } from 'express';
+
+// ─────────────────────────────────────────────────────────────
+// Phase 12 — Prometheus metrics
+// ─────────────────────────────────────────────────────────────
+import * as client from 'prom-client';
+
+client.collectDefaultMetrics({ prefix: 'goal_service_' });
+
+const tasksCompletedCounter = new client.Counter({
+    name: 'goal_service_tasks_completed_total',
+    help: 'Total number of tasks marked as complete',
+    labelNames: ['status'],
+});
+
+const kafkaPublishCounter = new client.Counter({
+    name: 'goal_service_kafka_events_published_total',
+    help: 'Total Kafka events published by goal-service',
+    labelNames: ['topic'],
+});
 
 // Public health endpoint (no auth guard)
 @Controller()
@@ -10,6 +30,13 @@ export class HealthController {
     @Get('health')
     health() {
         return { status: 'ok', service: 'goal-service', timestamp: new Date().toISOString() };
+    }
+
+    // ── Phase 12: Prometheus metrics scrape endpoint ──────────
+    @Get('metrics')
+    async metrics(@Res() res: Response) {
+        res.set('Content-Type', client.register.contentType);
+        res.end(await client.register.metrics());
     }
 }
 
@@ -83,8 +110,12 @@ export class GoalController implements OnModuleInit {
         };
 
         this.kafkaClient.emit('task.completed', eventPayload);
-        console.log(`✅ Task Completed & Event Emitted: ${task.title}`);
+
+        // Track in Prometheus
+        tasksCompletedCounter.labels('DONE').inc();
+        kafkaPublishCounter.labels('task.completed').inc();
 
         return task;
     }
 }
+

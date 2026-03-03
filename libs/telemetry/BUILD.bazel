@@ -1,0 +1,22 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "telemetry_lib",
+    srcs = glob(["src/**/*.ts"]),
+    tsconfig = "//:tsconfig.json",
+    declaration = True,
+    transpiler = "tsc",
+    deps = [
+        "//:node_modules/@opentelemetry/sdk-node",
+        "//:node_modules/@opentelemetry/exporter-trace-otlp-http",
+        "//:node_modules/@opentelemetry/resources",
+        "//:node_modules/@opentelemetry/semantic-conventions",
+        "//:node_modules/@opentelemetry/sdk-trace-base",
+        "//:node_modules/@opentelemetry/instrumentation-http",
+        "//:node_modules/@opentelemetry/instrumentation-express",
+        "//:node_modules/@opentelemetry/instrumentation-nestjs-core",
+        "//:node_modules/@types/node",
+    ],
+)

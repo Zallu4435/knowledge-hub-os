@@ -1,0 +1,157 @@
+# ============================================================
+# render.yaml — Render.com Infrastructure-as-Code
+# ============================================================
+# Deploy ALL backend services with one click using this file.
+#
+# How to use:
+#   1. Push this file to GitHub
+#   2. In Render Dashboard: New → Blueprint
+#   3. Connect your GitHub repo → Render reads this file
+#   4. Set the environment variables marked with `sync: false`
+#      (those are secrets you must fill in manually)
+#
+# Services deployed:
+#   - api-gateway  (NestJS, port 3000)
+#   - auth-service (NestJS, port 3001)
+#   - goal-service (NestJS, port 3002)
+#   - ai-service   (Python FastAPI, port 8000)
+#
+# NOTE: Redis and Kafka are NOT included here.
+# Use Upstash (https://upstash.com) for free Redis + Kafka.
+# Set REDIS_URL and KAFKA_BROKER_URL to your Upstash endpoints.
+# ============================================================
+
+services:
+
+  # ── 1. API Gateway ────────────────────────────────────────────
+  - type: web
+    name: knowledge-hub-api-gateway
+    runtime: docker
+    dockerfilePath: apps/api-gateway/Dockerfile
+    dockerContext: .       # Build context = repo root (needed for monorepo)
+    plan: free
+    region: oregon          # Free tier available in oregon and frankfurt
+    healthCheckPath: /users/health
+    envVars:
+      # ── Databases (already cloud-hosted) ──
+      - key: DATABASE_URL
+        sync: false          # You must set this in Render dashboard
+      - key: MONGO_URI
+        sync: false
+      # ── Kafka (Upstash) ──
+      - key: KAFKA_BROKER_URL
+        sync: false          # Your Upstash Kafka broker URL
+      # ── Redis (Upstash) ──
+      - key: REDIS_URL
+        sync: false          # Your Upstash Redis URL
+      # ── Auth ──
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      # ── AI ──
+      - key: GEMINI_API_KEY
+        sync: false
+      # ── CORS — update after all services are deployed ──
+      - key: ALLOWED_ORIGINS
+        sync: false          # e.g. https://your-app.vercel.app
+      # ── Ports ──
+      - key: PORT
+        value: "3000"
+      - key: PORT_API_GATEWAY
+        value: "3000"
+      # ── OpenTelemetry — disabled in free tier (no Jaeger available) ──
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      # ── Node env ──
+      - key: NODE_ENV
+        value: production
+
+  # ── 2. Auth Service ───────────────────────────────────────────
+  - type: web
+    name: knowledge-hub-auth-service
+    runtime: docker
+    dockerfilePath: apps/auth-service/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /auth/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: KAFKA_BROKER_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PORT
+        value: "3001"
+      - key: PORT_AUTH_SERVICE
+        value: "3001"
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      - key: NODE_ENV
+        value: production
+
+  # ── 3. Goal Service ───────────────────────────────────────────
+  - type: web
+    name: knowledge-hub-goal-service
+    runtime: docker
+    dockerfilePath: apps/goal-service/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: KAFKA_BROKER_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PORT
+        value: "3002"
+      - key: PORT_GOAL_SERVICE
+        value: "3002"
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      - key: NODE_ENV
+        value: production
+
+  # ── 4. AI Service (Python FastAPI) ────────────────────────────
+  - type: web
+    name: knowledge-hub-ai-service
+    runtime: docker
+    dockerfilePath: apps/ai-service/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: KAFKA_BROKER_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PORT
+        value: "8000"
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      - key: PYTHONUNBUFFERED
+        value: "1"

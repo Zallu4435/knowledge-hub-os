@@ -1,0 +1,36 @@
+# ============================================================
+# Grafana — Auto-Provisioned Datasources
+# These are loaded at Grafana startup; no manual UI config needed.
+# ============================================================
+
+apiVersion: 1
+
+datasources:
+
+  # ── Prometheus (metrics store) ───────────────
+  - name: Prometheus
+    type: prometheus
+    orgId: 1
+    uid: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: jaeger
+    editable: false
+
+  # ── Jaeger (distributed traces) ──────────────
+  - name: Jaeger
+    type: jaeger
+    orgId: 1
+    uid: jaeger
+    url: http://jaeger:16686
+    access: proxy
+    isDefault: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+    editable: false

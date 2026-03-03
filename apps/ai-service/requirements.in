@@ -14,3 +14,9 @@ PyJWT
 tenacity
 # Phase 4.3: Structured JSON logging
 structlog
+# Phase 12: Observability — Prometheus metrics endpoint
+prometheus-fastapi-instrumentator
+# Phase 12: Observability — OpenTelemetry distributed tracing → Jaeger
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-fastapi

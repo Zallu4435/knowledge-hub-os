@@ -1,271 +1,387 @@
 # 🧠 Knowledge Hub OS
 
-Knowledge Hub OS is an event-driven, polyglot productivity platform and autonomous AI coaching engine.
+> An **event-driven, polyglot productivity platform** with an autonomous AI coaching engine — built as a production-grade microservices monorepo.
 
-Built as a strict monorepo orchestrated by **Bazel**, this system bridges a rigid relational backend (PostgreSQL) with a flexible, intelligent NoSQL brain (MongoDB/Vector Search) using a real-time event streaming backbone (Kafka) — fully containerized with **Distroless Docker images** built hermetically via Bazel `rules_oci`.
-
----
-
-## ✨ Key Features
-
-- **Polyglot Microservices**: TypeScript (NestJS) handles strict relational business logic, while Python (FastAPI) handles data science, LLM integration, and vector mathematics.
-- **Event-Driven Architecture**: Complete decoupling of services. The frontend never waits for the AI. User actions trigger asynchronous Kafka events (`task.completed`, `user.events`) that wake up background workers.
-- **Cross-Language Type Safety**: A single source of truth. JSON Schemas are automatically compiled by Bazel into strict TypeScript Interfaces and Python Pydantic models.
-- **Agentic AI Workflows**:
-  - **The Architect**: Generates 30-day technical roadmaps upon user onboarding.
-  - **The Coach**: Watches the Kafka stream and generates contextual "High-Fives" and productivity tips when users complete tasks.
-- **RAG-Powered Chatbot**: MongoDB Atlas Vector Search processes user history, allowing users to query their own productivity data via an intelligent LLM interface.
-- **Enterprise Security**: Cross-service stateless JWT authentication with Redis-backed token blacklist and Edge Middleware protection on the Next.js frontend.
-- **Production Containerization**: All 5 services packaged into minimal Distroless Docker images via Bazel `rules_oci` — hermetic, reproducible, no shell, minimal CVE surface.
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](/.github/workflows/ci.yml)
+[![Deploy](https://img.shields.io/badge/Deploy-Vercel%20%2B%20Render-black?logo=vercel)](./DEPLOYMENT.md)
+[![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
 ---
 
-## 🏗️ System Architecture
+## ✨ What It Does
+
+Knowledge Hub OS is a productivity app where users create goals, break them into tasks, and an **AI brain** watches every completed task in real-time — generating personalized coaching insights, career roadmaps, and answering questions about their own work history via a RAG chatbot.
+
+**The AI never blocks the user.** Tasks complete instantly; AI processing happens asynchronously via Kafka.
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js)                    │
-│                  Port 4000 · :196 MB                    │
-└────────────────────┬────────────────────────────────────┘
-                     │ HTTP (frontend_net)
-┌────────────────────▼────────────────────────────────────┐
-│                  API GATEWAY (NestJS)                    │
-│                  Port 3000 · ~495 MB                    │
-└──────────┬─────────────────────────────┬────────────────┘
-           │         backend_net          │
-┌──────────▼──────────┐    ┌─────────────▼───────────────┐
-│  AUTH SERVICE        │    │         GOAL SERVICE         │
-│  NestJS · Port 3001  │    │      NestJS · Port 3002      │
-└──────────┬──────────┘    └──────────────┬──────────────┘
-           │                              │
-           └──────────── infra_net ───────┘──────────┐
-                         │                           │
-           ┌─────────────▼──────────┐  ┌─────────────▼──────────┐
-           │  REDPANDA (Kafka)       │  │         REDIS           │
-           │  Port 9092 / 29092      │  │       Port 6379         │
-           └─────────────┬──────────┘  └────────────────────────┘
-                         │ topic: task.completed / user.events
-           ┌─────────────▼──────────────────────────┐
-           │        AI SERVICE (FastAPI)             │
-           │    Python · LangChain · Port 8000       │
-           └─────────────┬──────────────────────────┘
-                         │
-           ┌─────────────▼──────────┐  ┌────────────────────────┐
-           │   MONGODB ATLAS         │  │      NEON POSTGRES      │
-           │   Vector + Insights     │  │   Users, Goals, Tasks   │
-           └────────────────────────┘  └────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                     FRONTEND  (Next.js 15)                       │
+│              Vercel in prod · Port 4000 in dev                   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ HTTPS (frontend_net)
+┌────────────────────────▼────────────────────────────────────────┐
+│                  API GATEWAY  (NestJS)  :3000                    │
+│          JWT validation · Kafka producer · Prisma                │
+└──────────┬──────────────────────────────┬──────────────────────┘
+           │ backend_net                  │ backend_net
+┌──────────▼──────────┐       ┌───────────▼──────────────────────┐
+│  AUTH SERVICE :3001  │       │       GOAL SERVICE :3002          │
+│  Register/Login/JWT  │       │  Goals · Tasks · Kafka producer   │
+│  Redis JWT blacklist │       └───────────┬──────────────────────┘
+└─────────────────────┘                   │ Kafka topics
+                        ┌─────────────────▼──────────────────────┐
+                        │  Redpanda (Kafka-compatible)  :9092      │
+                        │   Topics: user.events · task.completed   │
+                        └─────────────────┬──────────────────────┘
+                                          │ Consumer
+┌─────────────────────────────────────────▼──────────────────────┐
+│               AI SERVICE  (FastAPI + LangChain)  :8000          │
+│  "The Architect" — 30-day onboarding roadmap via Gemini         │
+│  "The Coach"     — task completion high-fives + tips            │
+│  RAG Chatbot     — MongoDB Vector Search + Gemini               │
+└──────────────────┬──────────────────────┬──────────────────────┘
+                   │                      │
+       ┌───────────▼──────────┐ ┌─────────▼────────────────────┐
+       │  MongoDB Atlas        │ │    Neon (Serverless Postgres) │
+       │  Vectors + Insights   │ │    Users, Goals, Tasks        │
+       └──────────────────────┘ └──────────────────────────────┘
+
+── Observability (Phase 12) ─────────────────────────────────────
+  Jaeger :16686  ←  OTLP traces from all 4 NestJS + Python services
+  Prometheus :9090  ←  /metrics scraped from every service every 15s
+  Grafana :3030   ←  Pre-built dashboard (auto-provisioned)
 ```
 
-### The Tech Stack
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Technology | Notes |
 |---|---|---|
-| **Build System** | Bazel 7.3.1 (Bzlmod) | Hermetic, reproducible builds |
-| **Containerization** | `rules_oci` + Distroless | Zero shell, minimal CVE surface |
-| **Frontend** | Next.js 15 (App Router) | Standalone build for Docker |
-| **API Gateway** | NestJS + TypeScript 5.2.2 | Port 3000 |
+| **Build System** | Bazel 7 (Bzlmod) | Hermetic, reproducible, cached builds |
+| **Containerisation** | `rules_oci` + Distroless | Zero shell, minimal CVE surface |
+| **Frontend** | Next.js 15 (App Router) | Standalone Docker build |
+| **API Gateway** | NestJS + TypeScript | Port 3000 |
 | **Auth Service** | NestJS + Redis JWT Blacklist | Port 3001 |
 | **Goal Service** | NestJS + Prisma ORM | Port 3002 |
 | **AI Service** | FastAPI + LangChain + Gemini | Port 8000 |
-| **Message Broker** | Redpanda (Kafka-compatible) | Port 9092 |
-| **Relational DB** | Neon (Serverless PostgreSQL) | Via Prisma |
-| **Document + Vector DB** | MongoDB Atlas | Vector Search (768-dim) |
+| **Message Broker** | Redpanda (Kafka-compatible) | Port 9092 · 29092 |
+| **Relational DB** | Neon (Serverless PostgreSQL) | Via Prisma ORM |
+| **Document + Vector DB** | MongoDB Atlas | 768-dim cosine similarity |
 | **Cache / Blacklist** | Redis 7 | JWT token blacklist |
+| **Tracing** | OpenTelemetry → Jaeger | OTLP/HTTP, BatchSpanProcessor |
+| **Metrics** | prom-client + Prometheus | Scraped every 15 s |
+| **Dashboards** | Grafana 10 | Auto-provisioned datasources |
+| **CI** | GitHub Actions | Bazel test → Docker build → GHCR push |
+| **CD** | GitHub Actions → SSH | Rolling restart on Oracle / Render |
 
 ---
 
-## 🔄 The Event Loop
+## 🔄 How the Event Loop Works
 
-1. **Action**: User logs in and marks a task as "Done" via the Next.js dashboard.
-2. **State Update**: Request hits the NestJS Goal Service → updates PostgreSQL via Prisma.
-3. **Event Emission**: Goal Service fires a strictly-typed `task.completed` event into Redpanda (Kafka) and returns immediately.
-4. **AI Interception**: FastAPI Python worker consumes the event off the stream.
-5. **Intelligence Generation**: LangChain calls Google Gemini ("The Coach"), generates a productivity insight, embeds it into a 768-dim vector.
-6. **Storage**: Vector + insight saved to MongoDB Atlas.
-7. **Retrieval**: User navigates to `/chat` → vector similarity search → Gemini gives personalized advice based on their task history.
+```
+User clicks "Mark Done" on the UI
+   │
+   ▼
+Goal Service → UPDATE task SET status='DONE' → Postgres
+   │
+   ├──▶ Kafka: emit('task.completed', { userId, goalTitle, taskTitle })
+   │         [returns immediately — user is NOT waiting]
+   │
+   ▼ (async, background)
+AI Service consumer wakes up
+   │
+   ├──▶ Gemini: "The Coach" generates personalised insight
+   ├──▶ Embeds insight into 768-dim vector
+   └──▶ MongoDB Atlas: insert { insight, embedding, userId }
+
+User opens /chat → asks "How am I doing?"
+   │
+   ▼
+Embedding similarity search (MongoDB $vectorSearch)
+   │
+   └──▶ Gemini: RAG response using top-5 past insights
+```
 
 ---
 
-## 🚀 Getting Started
+## 📂 Repository Structure
+
+```
+knowledge-hub-os/
+├── apps/
+│   ├── api-gateway/          # NestJS entry-point + JWT validation
+│   │   ├── src/
+│   │   ├── Dockerfile        # For Render.com deployment
+│   │   └── BUILD.bazel       # Bazel: js_image_layer → oci_tarball
+│   ├── auth-service/         # Register / Login / Logout + Redis blacklist
+│   │   ├── src/
+│   │   ├── Dockerfile
+│   │   └── BUILD.bazel
+│   ├── goal-service/         # Goals · Tasks · Kafka producer
+│   │   ├── src/
+│   │   ├── Dockerfile
+│   │   └── BUILD.bazel
+│   ├── ai-service/           # FastAPI + LangChain + Gemini + aiokafka
+│   │   ├── main.py
+│   │   ├── Dockerfile
+│   │   ├── requirements.in   # Abstract deps
+│   │   └── requirements.txt  # Locked deps (pip-compile output)
+│   └── frontend/             # Next.js 15 App Router
+│       └── BUILD.bazel
+│
+├── libs/
+│   ├── database/             # Shared Prisma client (schema.prisma)
+│   ├── event_schemas/        # JSON Schema → TS Interface + Pydantic models
+│   ├── exceptions/           # Global NestJS HttpExceptionFilter
+│   ├── security/             # JwtAuthGuard + RedisService
+│   └── telemetry/            # OpenTelemetry SDK bootstrap (shared NestJS)
+│       └── src/tracer.ts     # BatchSpanProcessor → Jaeger OTLP/HTTP
+│
+├── infra/
+│   ├── prometheus/
+│   │   └── prometheus.yml    # Scrape config for all 6 services
+│   ├── grafana/
+│   │   ├── provisioning/     # Auto-datasource: Prometheus + Jaeger
+│   │   └── dashboards/       # Pre-built overview dashboard (9 panels)
+│   └── nginx/
+│       └── nginx.conf        # Reverse proxy for production (port 80)
+│
+├── docs/
+│   ├── OBSERVABILITY.md      # Jaeger · Prometheus · Grafana guide
+│   └── phase-*.md            # Build-phase documentation
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml            # Test → Build Docker images → Push to GHCR
+│       └── cd.yml            # Auto-deploy to Oracle / Render on push
+│
+├── docker-compose.yml        # Full local stack (all services + observability)
+├── docker-compose.prod.yml   # Production override (GHCR images + Nginx)
+├── render.yaml               # Render.com Blueprint (one-click deploy)
+├── deploy.sh                 # Rolling restart script for self-hosted VMs
+├── DEPLOYMENT.md             # Step-by-step free deployment guide
+├── .env.prod.example         # Production env-var template
+└── MODULE.bazel              # Bazel module deps (rules_oci, rules_pkg …)
+```
+
+---
+
+## 🚀 Quick Start (Local Dev)
 
 ### Prerequisites
 
-- Bazel 7+ (via `bazelisk`) and Node.js 20+ with `pnpm`
-- Python 3.11+ (for local AI service dev only)
-- Docker & Docker Compose
-- API Keys: Neon Postgres, MongoDB Atlas, Google Gemini
+| Tool | Version | Install |
+|---|---|---|
+| Node.js | 20+ | [nodejs.org](https://nodejs.org) |
+| pnpm | 8+ | `npm i -g pnpm` |
+| Python | 3.11+ | [python.org](https://python.org) |
+| Docker + Compose | Latest | [docker.com](https://docker.com) |
+| Bazelisk | Latest | `npm i -g @bazel/bazelisk` |
 
-### Environment Configuration
-
-Copy and fill in the root `.env` file:
-
-```env
-# --- Database ---
-DATABASE_URL="postgresql://[USER]:[PASSWORD]@[NEON_HOST]/neondb?sslmode=require&pgbouncer=true"
-
-# --- MongoDB (AI insights store) ---
-MONGO_URI="mongodb+srv://[USER]:[PASSWORD]@[CLUSTER].mongodb.net/?appName=Cluster0"
-
-# --- Google Gemini AI ---
-GEMINI_API_KEY="AIzaSy..."
-
-# --- JWT ---
-JWT_SECRET="your-super-secret-development-key"
-JWT_EXPIRES_IN="1d"
-
-# --- Kafka ---
-KAFKA_BROKER_URL="localhost:9092"
-
-# --- Redis ---
-REDIS_URL="redis://localhost:6379"
-
-# --- Service Ports ---
-PORT_API_GATEWAY=3000
-PORT_AUTH_SERVICE=3001
-PORT_GOAL_SERVICE=3002
-PORT_AI_SERVICE=8000
-PORT_FRONTEND=4000
-
-# --- CORS ---
-ALLOWED_ORIGINS="http://localhost:4000"
-
-# --- Public URLs (Next.js) ---
-NEXT_PUBLIC_API_GATEWAY_URL="http://localhost:3000"
-NEXT_PUBLIC_AUTH_URL="http://localhost:3001"
-NEXT_PUBLIC_GOAL_SERVICE_URL="http://localhost:3002"
-NEXT_PUBLIC_AI_SERVICE_URL="http://localhost:8000"
-```
-
-> **MongoDB Requirement**: Create a Vector Search Index named `vector_index` on the `knowledge_hub.user_insights` collection (`embedding` field, 768 dimensions, cosine similarity).
-
----
-
-### Option A: 🐳 Production Mode (Docker Compose)
+### 1. Clone & Install
 
 ```bash
-# Step 1: Build all 5 Docker images via Bazel
-bazel run //apps/goal-service:tarball
-bazel run //apps/auth-service:tarball
+git clone https://github.com/<your-username>/knowledge-hub-os.git
+cd knowledge-hub-os
+pnpm install
+```
+
+### 2. Configure Environment
+
+```bash
+cp .env.prod.example .env
+# Open .env and fill in your keys (see table below)
+```
+
+**Required environment variables:**
+
+| Variable | Where to get it | Free? |
+|---|---|---|
+| `DATABASE_URL` | [neon.tech](https://neon.tech) → New Project → Connection string | ✅ |
+| `MONGO_URI` | [mongodb.com/atlas](https://mongodb.com/atlas) → Connect → Drivers | ✅ |
+| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) → Get API key | ✅ |
+| `JWT_SECRET` | Run: `openssl rand -base64 32` | ✅ |
+
+> **MongoDB one-time setup:** Create a Vector Search Index named `vector_index`
+> on collection `knowledge_hub.user_insights`, field `embedding`, 768 dimensions,
+> cosine similarity.
+
+### 3. Option A — Full Docker Stack (Recommended)
+
+```bash
+# Build all 5 Distroless images via Bazel (hermetic)
 bazel run //apps/api-gateway:tarball
+bazel run //apps/auth-service:tarball
+bazel run //apps/goal-service:tarball
 bazel run //apps/ai-service:tarball
 bazel run //apps/frontend:tarball
 
-# Step 2: Verify all images are loaded
+# Verify images are loaded
 docker images | grep knowledgehub
 
-# Step 3: Launch the full stack
+# Launch everything (app + Redpanda + Redis + Observability)
 docker compose up -d
 
-# Step 4: Check all services are healthy
+# Check health
 docker compose ps
 
-# Step 5: Access the app
+# Open app
 open http://localhost:4000
 ```
 
-### Option B: 🛠 Development Mode (Bazel Run)
+**Service URLs:**
 
-Run each service in a separate terminal:
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:4000 |
+| API Gateway | http://localhost:3000 |
+| Auth Service | http://localhost:3001 |
+| Goal Service | http://localhost:3002 |
+| AI Service | http://localhost:8000 |
+| **Grafana** | http://localhost:3030 `admin/admin` |
+| **Jaeger UI** | http://localhost:16686 |
+| **Prometheus** | http://localhost:9090 |
+
+### 4. Option B — Dev Mode (Bazel Run, no Docker for services)
 
 ```bash
-# Start infrastructure first
+# Start only infrastructure
 docker compose up redpanda redis -d
 
-# Run database migrations (first time only)
+# First time: apply DB schema
 npx prisma db push --schema=libs/database/schema.prisma
 npx prisma generate --schema=libs/database/schema.prisma
 
-# Terminal 1: API Gateway (Port 3000)
-bazel run //apps/api-gateway:api-gateway
-
-# Terminal 2: Auth Service (Port 3001)
-bazel run //apps/auth-service:auth-service
-
-# Terminal 3: Goal Service (Port 3002)
-bazel run //apps/goal-service:goal-service
-
-# Terminal 4: AI Service (Port 8000)
-bazel run //apps/ai-service:ai-service
-
-# Terminal 5: Frontend (Port 4000)
-bazel run //apps/frontend:dev
-```
-
-Navigate to `http://localhost:4000`.
-
----
-
-## 📂 Monorepo Structure
-
-```plaintext
-knowledge-hub-os/
-├── apps/
-│   ├── api-gateway/          # NestJS entry point & reverse proxy
-│   │   └── BUILD.bazel       # → js_image_layer + oci_tarball
-│   ├── auth-service/         # JWT Identity Provider + Redis blacklist
-│   │   └── BUILD.bazel       # → js_image_layer + oci_tarball
-│   ├── goal-service/         # Core User/Goal/Task business logic
-│   │   └── BUILD.bazel       # → js_image_layer + oci_tarball
-│   ├── ai-service/           # FastAPI + LangChain + Gemini
-│   │   └── BUILD.bazel       # → pkg_tar + oci_tarball
-│   └── frontend/             # Next.js App Router (standalone build)
-│       └── BUILD.bazel       # → genrule(next build) + pkg_tar + oci_tarball
-├── libs/
-│   ├── database/             # Shared Prisma client (PostgreSQL)
-│   ├── event_schemas/        # JSON Schemas → TS + Python codegen
-│   ├── exceptions/           # Shared NestJS HttpExceptionFilter
-│   └── security/             # Shared JwtAuthGuard + RedisService
-├── docs/
-│   ├── phase-1-workspace-initialization.md
-│   ├── phase-2-polyglot-persistence.md
-│   ├── phase-3-security-product-ai.md
-│   └── phase-4-containerization.md    ← NEW
-├── docker-compose.yml        # Production: all 5 services + Redis + Redpanda
-├── MODULE.bazel              # Bazel deps (rules_oci, rules_pkg, rules_python…)
-└── .env                      # Environment secrets (never commit)
+# Each service in a separate terminal:
+bazel run //apps/api-gateway:api-gateway    # Terminal 1
+bazel run //apps/auth-service:auth-service  # Terminal 2
+bazel run //apps/goal-service:goal-service  # Terminal 3
+bazel run //apps/ai-service:ai-service      # Terminal 4
+bazel run //apps/frontend:dev               # Terminal 5
 ```
 
 ---
 
-## 📋 Docker Images Summary
+## 🌐 Deployment (Free, No Credit Card)
 
-| Image | Base | Size | Build Command |
-|---|---|---|---|
-| `knowledgehub/goal-service:latest` | distroless/nodejs20 | 495 MB | `bazel run //apps/goal-service:tarball` |
-| `knowledgehub/auth-service:latest` | distroless/nodejs20 | 497 MB | `bazel run //apps/auth-service:tarball` |
-| `knowledgehub/api-gateway:latest` | distroless/nodejs20 | 495 MB | `bazel run //apps/api-gateway:tarball` |
-| `knowledgehub/ai-service:latest` | distroless/python3 | 408 MB | `bazel run //apps/ai-service:tarball` |
-| `knowledgehub/frontend:latest` | distroless/nodejs20 | **196 MB** | `bazel run //apps/frontend:tarball` |
+> Full step-by-step guide → **[DEPLOYMENT.md](./DEPLOYMENT.md)**
+
+**Summary:**
+
+| Component | Platform | Cost |
+|---|---|---|
+| Frontend (Next.js) | **Vercel** free hobby plan | $0 |
+| API Gateway, Auth, Goal, AI | **Render** free web services | $0 |
+| Kafka (replaces Redpanda) | **Upstash Kafka** free tier | $0 |
+| Redis (replaces container) | **Upstash Redis** free tier | $0 |
+| PostgreSQL | **Neon** (already configured) | $0 |
+| MongoDB | **MongoDB Atlas** (already configured) | $0 |
+| Gemini AI | Google AI Studio (already configured) | $0 |
+| **Total** | | **$0/month** |
+
+**One-click Render deploy:** The `render.yaml` file in this repo defines all 4
+backend services. In Render Dashboard → New → Blueprint → connect this repo →
+all services are created automatically.
+
+---
+
+## 📊 Observability
+
+> Full guide → **[docs/OBSERVABILITY.md](./docs/OBSERVABILITY.md)**
+
+Phase 12 added a complete observability stack:
+
+**Distributed Tracing (Jaeger)**
+- All 4 NestJS services and the Python FastAPI service send traces via OTLP/HTTP
+- Shared `libs/telemetry/src/tracer.ts` bootstraps `NodeSDK` with `BatchSpanProcessor`
+- Auto-instruments HTTP, Express, NestJS controllers
+
+**Metrics (Prometheus + Grafana)**
+- Every service exposes a `/metrics` endpoint via `prom-client` (NestJS) or `prometheus-fastapi-instrumentator` (Python)
+- Prometheus scrapes all 6 targets every 15 s
+- Pre-built Grafana dashboard includes: HTTP throughput, p95 latency, error rate, Kafka lag, Redis hit ratio
+
+**Custom Business Metrics:**
+
+| Service | Metric | Description |
+|---|---|---|
+| api-gateway | `api_gateway_kafka_events_published_total` | Kafka publishes by topic |
+| auth-service | `auth_service_operations_total{operation,status}` | register/login/logout |
+| goal-service | `goal_service_tasks_completed_total` | Task completions |
+| goal-service | `goal_service_kafka_events_published_total` | Kafka publishes |
+
+---
+
+## 🔁 CI/CD Pipeline
+
+```
+git push main
+       │
+       ├── .github/workflows/ci.yml
+       │     ├── 🧪 test   — bazel test //... + pytest ai-service
+       │     ├── 🏗️ build  — bazel build :tarball (all 5 services)
+       │     └── 🚀 push   — docker push → ghcr.io (main branch only)
+       │
+       └── .github/workflows/cd.yml  (triggers after CI push job)
+             └── SSH → Oracle VM / Render → rolling restart → health check
+```
+
+**Required GitHub Secrets** (Settings → Secrets → Actions):
+
+| Secret | Value |
+|---|---|
+| `ORACLE_VM_IP` | Your server's public IP |
+| `ORACLE_SSH_KEY` | SSH private key file contents |
+| `GITHUB_ORG` | Your GitHub username |
+
+---
+
+## 🐳 Docker Images
+
+| Image | Base | Built with |
+|---|---|---|
+| `knowledgehub/api-gateway` | distroless/nodejs20 | `bazel run //apps/api-gateway:tarball` |
+| `knowledgehub/auth-service` | distroless/nodejs20 | `bazel run //apps/auth-service:tarball` |
+| `knowledgehub/goal-service` | distroless/nodejs20 | `bazel run //apps/goal-service:tarball` |
+| `knowledgehub/ai-service` | distroless/python3 | `bazel run //apps/ai-service:tarball` |
+| `knowledgehub/frontend` | distroless/nodejs20 | `bazel run //apps/frontend:tarball` |
 
 ---
 
 ## 📚 Phase Documentation
 
-| Phase | Doc | What Was Built |
-|---|---|---|
-| **Phase 1–6** | [phase-1-workspace-initialization.md](docs/phase-1-workspace-initialization.md) | Bazel workspace, pnpm, Python lockfile, cross-language contracts, NestJS scaffold, Kafka bridge |
-| **Phase 7–8** | [phase-2-polyglot-persistence.md](docs/phase-2-polyglot-persistence.md) | PostgreSQL (Prisma), MongoDB Atlas, polyglot persistence |
-| **Phase 9–10** | [phase-3-security-product-ai.md](docs/phase-3-security-product-ai.md) | JWT auth, Goal/Task product, RAG chatbot, agentic AI |
-| **Phase 11–12** | [phase-4-containerization.md](docs/phase-4-containerization.md) | `rules_oci`, Distroless images, Docker Compose orchestration ✅ |
+| Phase | What Was Built |
+|---|---|
+| **Phase 1–6** | Bazel workspace · pnpm monorepo · Python lockfile · cross-language JSON Schema contracts · NestJS scaffold · Kafka event bridge |
+| **Phase 7–8** | Prisma + Neon PostgreSQL · MongoDB Atlas · polyglot persistence layer |
+| **Phase 9–10** | JWT auth + Redis blacklist · Goal/Task product · RAG chatbot · Agentic AI ("Architect" + "Coach") |
+| **Phase 11** | `rules_oci` Distroless images · Docker Compose 3-tier networking · health checks · resource limits |
+| **Phase 12** | OpenTelemetry tracing · Prometheus metrics · Grafana dashboards · GitHub Actions CI/CD |
 
 ---
 
-## 🗺️ Roadmap
+## ✅ Roadmap
 
-- [x] **Workspace & Monorepo Setup** — Bazel, pnpm, pip-tools
-- [x] **Cross-Language Contracts** — JSON Schema → TypeScript + Pydantic codegen
-- [x] **Event-Driven Backbone** — Redpanda (Kafka) producer/consumer
-- [x] **Polyglot Persistence** — Neon PostgreSQL + MongoDB Atlas
-- [x] **Security Layer** — NestJS JWT Auth, Redis blacklist, shared guards
-- [x] **Agentic AI Engine** — LangChain + Gemini "Architect" & "Coach"
-- [x] **RAG Chatbot** — MongoDB Vector Search + semantic retrieval
-- [x] **Production Containerization** — `rules_oci` + Distroless for all 5 services
-- [x] **Production Orchestration** — Docker Compose with 3-tier networks + health checks
-- [ ] **Observability Stack** — OpenTelemetry, Prometheus, Grafana
-- [ ] **Cloud Deployment** — AWS ECS / Google Cloud Run
-- [ ] **CI/CD Pipeline** — GitHub Actions with `bazel test` + `bazel build`
+- [x] Bazel monorepo with pnpm + pip-tools
+- [x] Cross-language type contracts (JSON Schema → TS + Pydantic)
+- [x] Event-driven backbone (Redpanda/Kafka)
+- [x] Polyglot persistence (Neon + MongoDB Atlas)
+- [x] JWT auth + Redis token blacklist
+- [x] Agentic AI engine (LangChain + Gemini "Architect" & "Coach")
+- [x] RAG chatbot (MongoDB Vector Search)
+- [x] Distroless Docker images via Bazel `rules_oci`
+- [x] Docker Compose production orchestration
+- [x] **Observability** — OpenTelemetry · Prometheus · Grafana · Jaeger
+- [x] **CI/CD** — GitHub Actions (test → build → push → deploy)
+- [x] **Free cloud deployment** — Vercel + Render + Upstash (zero cost)
 
 ---
 
-**Author:** Muhammed Nazal k
+**Author:** Muhammed Nazal K  
 **License:** MIT

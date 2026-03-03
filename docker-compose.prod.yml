@@ -1,0 +1,75 @@
+# ============================================================
+# docker-compose.prod.yml — Production Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This override:
+#   1. Rewrites app image tags to pull from GHCR
+#   2. Adds Nginx as the single public-facing reverse proxy on port 80
+#   3. Removes direct port exposure from app services (they go through Nginx)
+#
+# Replace <GITHUB_ORG> with your GitHub username or set env var:
+#   export GITHUB_ORG=your-github-username
+# ============================================================
+
+services:
+
+  # ── Application Services: pull from GHCR ──────────────────────────────────
+
+  api-gateway:
+    image: ghcr.io/${GITHUB_ORG}/knowledge-hub-os/api-gateway:latest
+    pull_policy: always
+    ports: !reset [] # Remove direct port exposure — go through Nginx
+
+  auth-service:
+    image: ghcr.io/${GITHUB_ORG}/knowledge-hub-os/auth-service:latest
+    pull_policy: always
+    ports: !reset []
+
+  goal-service:
+    image: ghcr.io/${GITHUB_ORG}/knowledge-hub-os/goal-service:latest
+    pull_policy: always
+    ports: !reset []
+
+  ai-service:
+    image: ghcr.io/${GITHUB_ORG}/knowledge-hub-os/ai-service:latest
+    pull_policy: always
+    ports: !reset []
+
+  frontend:
+    image: ghcr.io/${GITHUB_ORG}/knowledge-hub-os/frontend:latest
+    pull_policy: always
+    ports: !reset []
+
+  # ── Nginx Reverse Proxy ────────────────────────────────────────────────────
+  # Single public port 80. Routes /api/auth, /api/goals, /api/ai, /api, / to
+  # the correct upstream service by path prefix.
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: knowledgehub-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - api-gateway
+      - auth-service
+      - goal-service
+      - ai-service
+    networks:
+      - frontend_net
+      - backend_net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost/api/users/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Observability: keep running on Oracle 24GB RAM ────────────────────────
+  # Comment out all four blocks below if your server has < 6GB RAM
+  jaeger: {}
+  prometheus: {}
+  grafana: {}
+  redis-exporter: {}
