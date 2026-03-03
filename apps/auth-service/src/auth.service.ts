@@ -26,7 +26,9 @@ export class AuthService implements OnModuleInit {
     ) { }
 
     async onModuleInit() {
-        await this.kafkaClient.connect();
+        if (process.env.KAFKA_BROKER_URL) {
+            await this.kafkaClient.connect();
+        }
     }
 
     async register(email: string, pass: string, role: string = 'developer') {
@@ -51,9 +53,21 @@ export class AuthService implements OnModuleInit {
             },
         };
 
-        // Emit to Kafka
-        this.kafkaClient.emit('user.events', eventPayload);
-        this.logger.log(`📢 Auth Service emitted UserCreatedEvent for: ${user.email}`);
+        // Emit to Kafka (if configured)
+        if (process.env.KAFKA_BROKER_URL) {
+            this.kafkaClient.emit('user.events', eventPayload);
+            this.logger.log(`📢 Auth Service emitted UserCreatedEvent for: ${user.email}`);
+        }
+
+        // HTTP fallback: when Kafka is not configured
+        const aiServiceUrl = process.env.AI_SERVICE_INTERNAL_URL || process.env.NEXT_PUBLIC_AI_SERVICE_URL;
+        if (!process.env.KAFKA_BROKER_URL && aiServiceUrl) {
+            fetch(`${aiServiceUrl}/events/user-created`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(eventPayload),
+            }).catch((err) => this.logger.error('[HTTP-fallback] user event failed:', err));
+        }
 
         const payload = { sub: user.id, email: user.email, role: user.role };
         return {

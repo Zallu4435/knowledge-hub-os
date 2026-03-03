@@ -170,6 +170,111 @@ class ChatRequest(BaseModel):
 async def health():
     return {"status": "ok", "service": "ai-service", "timestamp": __import__("datetime").datetime.utcnow().isoformat()}
 
+
+# =============================================================================
+# HTTP Fallback Event Endpoints
+# Used when Kafka is not configured (e.g. Render free tier).
+# NestJS services POST events here directly instead of publishing to Kafka.
+# When KAFKA_BROKER_URL is set, Kafka consumer handles events instead.
+# =============================================================================
+class UserEventPayload(BaseModel):
+    eventId: str
+    timestamp: str
+    data: dict
+
+class TaskEventPayload(BaseModel):
+    eventId: str
+    timestamp: str
+    data: dict
+
+
+@app.post("/events/user-created")
+async def http_user_event(payload: UserEventPayload):
+    """
+    HTTP equivalent of the 'user.events' Kafka topic.
+    Called by api-gateway when KAFKA_BROKER_URL is not set.
+    """
+    log.info("http_user_event_received", event_id=payload.eventId)
+    # Run in background so the HTTP response returns immediately
+    asyncio.create_task(_process_user_event(payload.dict()))
+    return {"status": "accepted", "eventId": payload.eventId}
+
+
+@app.post("/events/task-completed")
+async def http_task_event(payload: TaskEventPayload):
+    """
+    HTTP equivalent of the 'task.completed' Kafka topic.
+    Called by goal-service when KAFKA_BROKER_URL is not set.
+    """
+    log.info("http_task_event_received", event_id=payload.eventId)
+    asyncio.create_task(_process_task_event(payload.dict()))
+    return {"status": "accepted", "eventId": payload.eventId}
+
+
+async def _process_user_event(raw_data: dict):
+    """Shared processing logic for user.events (Kafka + HTTP path)."""
+    event_id = raw_data.get("eventId")
+    try:
+        existing = await insights_collection.find_one({"eventId": event_id})
+        if existing:
+            log.info("duplicate_event_skipped", event_id=event_id)
+            return
+        from libs.event_schemas.user_created_event import UserCreatedEvent
+        event = UserCreatedEvent(**raw_data)
+        llm = make_llm()
+        roadmap_prompt = PromptTemplate.from_template(
+            "You are an expert career architect for Knowledge Hub OS. "
+            "A new user joined as a: {role}. "
+            "Generate a specific, 3-step technical roadmap for their first 30 days in one concise paragraph."
+        )
+        ai_response = await invoke_with_retry(roadmap_prompt | llm, {"role": event.data.role})
+        vector = await embeddings.aembed_query(ai_response.content)
+        await insights_collection.insert_one({
+            "eventId": event_id,
+            "userId": event.data.userId,
+            "type": "career_roadmap",
+            "ai_summary": ai_response.content,
+            "embedding": vector,
+            "processed_at": event.timestamp,
+        })
+        log.info("user_insight_saved", event_id=event_id)
+    except Exception as e:
+        log.error("user_event_processing_error", error=str(e), event_id=event_id)
+
+
+async def _process_task_event(raw_data: dict):
+    """Shared processing logic for task.completed (Kafka + HTTP path)."""
+    event_id = raw_data.get("eventId")
+    try:
+        existing = await insights_collection.find_one({"eventId": event_id})
+        if existing:
+            log.info("duplicate_event_skipped", event_id=event_id)
+            return
+        from libs.event_schemas.task_completed_event import TaskCompletedEvent
+        event = TaskCompletedEvent(**raw_data)
+        llm = make_llm()
+        coach_prompt = PromptTemplate.from_template(
+            "You are an energetic AI productivity coach. "
+            "The user just completed the task '{task}' which is part of their overarching goal: '{goal}'. "
+            "Give them a short, punchy high-five acknowledging their specific work, and a 1-sentence tip on maintaining momentum."
+        )
+        ai_response = await invoke_with_retry(coach_prompt | llm, {"task": event.data.taskTitle, "goal": event.data.goalTitle})
+        vector = await embeddings.aembed_query(ai_response.content)
+        await insights_collection.insert_one({
+            "eventId": event_id,
+            "userId": event.data.userId,
+            "type": "productivity_insight",
+            "goal": event.data.goalTitle,
+            "task": event.data.taskTitle,
+            "ai_summary": ai_response.content,
+            "embedding": vector,
+            "processed_at": event.timestamp,
+        })
+        log.info("task_insight_saved", event_id=event_id)
+    except Exception as e:
+        log.error("task_event_processing_error", error=str(e), event_id=event_id)
+
+
 @app.get("/insights")
 async def get_insights(user_id: str = Depends(verify_token)):
     cursor = insights_collection.find({"userId": user_id}).sort("processed_at", -1).limit(20)
@@ -402,7 +507,13 @@ async def consume_kafka():
 # =============================================================================
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(consume_kafka())
+    # Only start Kafka consumer if KAFKA_BROKER_URL is configured.
+    # On Render free tier without Kafka, events arrive via HTTP instead.
+    if KAFKA_BROKER_URL and KAFKA_BROKER_URL not in ("none", "disabled", ""):
+        log.info("kafka_enabled", broker=KAFKA_BROKER_URL)
+        asyncio.create_task(consume_kafka())
+    else:
+        log.info("kafka_disabled_using_http_fallback")
 
 
 if __name__ == "__main__":

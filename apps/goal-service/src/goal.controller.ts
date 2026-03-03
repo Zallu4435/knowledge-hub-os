@@ -49,7 +49,9 @@ export class GoalController implements OnModuleInit {
     ) { }
 
     async onModuleInit() {
-        await this.kafkaClient.connect();
+        if (process.env.KAFKA_BROKER_URL) {
+            await this.kafkaClient.connect();
+        }
     }
 
     // Fetch all goals and their related tasks for the logged-in user
@@ -109,11 +111,24 @@ export class GoalController implements OnModuleInit {
             }
         };
 
-        this.kafkaClient.emit('task.completed', eventPayload);
+        if (process.env.KAFKA_BROKER_URL) {
+            this.kafkaClient.emit('task.completed', eventPayload);
+            kafkaPublishCounter.labels('task.completed').inc();
+        }
+
+        // HTTP fallback: when Kafka is not configured (e.g. Render free tier),
+        // post directly to ai-service. Fire-and-forget — don't await.
+        const aiServiceUrl = process.env.AI_SERVICE_INTERNAL_URL || process.env.NEXT_PUBLIC_AI_SERVICE_URL;
+        if (!process.env.KAFKA_BROKER_URL && aiServiceUrl) {
+            fetch(`${aiServiceUrl}/events/task-completed`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(eventPayload),
+            }).catch((err) => console.error('[HTTP-fallback] task event failed:', err));
+        }
 
         // Track in Prometheus
         tasksCompletedCounter.labels('DONE').inc();
-        kafkaPublishCounter.labels('task.completed').inc();
 
         return task;
     }

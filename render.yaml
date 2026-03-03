@@ -38,10 +38,17 @@ services:
         sync: false          # You must set this in Render dashboard
       - key: MONGO_URI
         sync: false
-      # ── Kafka (Upstash) ──
+      # ── Kafka (optional — leave blank to use HTTP fallback to ai-service) ──
       - key: KAFKA_BROKER_URL
-        sync: false          # Your Upstash Kafka broker URL
-      # ── Redis (Upstash) ──
+        value: ""          # Blank = HTTP fallback mode. Set to Redpanda URL to enable Kafka.
+      - key: KAFKA_SASL_USERNAME
+        value: ""
+      - key: KAFKA_SASL_PASSWORD
+        value: ""
+      # ── AI Service internal URL (used by HTTP fallback) ──────────
+      # Set AFTER ai-service is deployed. Find its URL in Render dashboard.
+      - key: AI_SERVICE_INTERNAL_URL
+        sync: false        # e.g. https://knowledge-hub-ai-service.onrender.com
       - key: REDIS_URL
         sync: false          # Your Upstash Redis URL
       # ── Auth ──

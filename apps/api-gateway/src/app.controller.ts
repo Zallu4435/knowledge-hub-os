@@ -35,7 +35,9 @@ export class AppController implements OnModuleInit {
   ) { }
 
   async onModuleInit() {
-    await this.kafkaClient.connect();
+    if (process.env.KAFKA_BROKER_URL) {
+      await this.kafkaClient.connect();
+    }
   }
 
   // ── Health ────────────────────────────────────────────────
@@ -63,10 +65,23 @@ export class AppController implements OnModuleInit {
       },
     });
 
-    this.kafkaClient.emit('user.events', event);
+    if (process.env.KAFKA_BROKER_URL) {
+      this.kafkaClient.emit('user.events', event);
+      // Track the publish in Prometheus
+      kafkaPublishCounter.labels('user.events').inc();
+    }
 
-    // Track the publish in Prometheus
-    kafkaPublishCounter.labels('user.events').inc();
+    // HTTP fallback: when Kafka is not configured (e.g. Render free tier),
+    // post directly to ai-service. Fire-and-forget — don't await.
+    const aiServiceUrl = process.env.AI_SERVICE_INTERNAL_URL || process.env.NEXT_PUBLIC_AI_SERVICE_URL;
+    if (!process.env.KAFKA_BROKER_URL && aiServiceUrl) {
+      fetch(`${aiServiceUrl}/events/user-created`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+      }).catch((err) => console.error('[HTTP-fallback] user event failed:', err));
+    }
+
     httpRequestsTotal.labels('POST', '/users', '200').inc();
 
     return {
