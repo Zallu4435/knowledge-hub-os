@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Inject, OnModuleInit, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Inject, OnModuleInit, UseGuards, Req } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { UserCreatedEvent } from '../../../libs/event_schemas/UserCreatedEvent';
 import { PrismaService } from '../../../libs/database/src/prisma.service';
@@ -13,6 +13,11 @@ export class AppController implements OnModuleInit {
 
   async onModuleInit() {
     await this.kafkaClient.connect();
+  }
+
+  @Get('health')
+  health() {
+    return { status: 'ok', service: 'api-gateway', timestamp: new Date().toISOString() };
   }
 
   // 🔒 THIS ROUTE IS NOW PROTECTED

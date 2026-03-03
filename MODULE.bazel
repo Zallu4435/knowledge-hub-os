@@ -5,6 +5,7 @@ module(
 
 # 1. Standard Bazel Library
 bazel_dep(name = "bazel_skylib", version = "1.5.0")
+bazel_dep(name = "rules_pkg", version = "1.0.1")
 
 # 2. Node.js & TypeScript Ecosystem (Next.js, NestJS)
 bazel_dep(name = "aspect_rules_js", version = "1.34.1")
@@ -53,3 +54,36 @@ rules_ts_ext.deps(
     ts_version_from = "//:package.json",
 )
 use_repo(rules_ts_ext, "npm_typescript")
+
+# -----------------------------
+# rules_oci (Docker Containerization)
+# -----------------------------
+bazel_dep(name = "rules_oci", version = "1.7.5")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+# Node Distroless Base (used for frontend pkg_tar — no bash needed)
+oci.pull(
+    name = "distroless_nodejs",
+    digest = "sha256:a3c4d477f3f303cfdf2b43b0a255fb5a0d435957b466819b3c0940d9d05404b6", # Node 20
+    image = "gcr.io/distroless/nodejs20-debian11",
+    platforms = ["linux/amd64", "linux/arm64"],
+)
+
+# Node 20 Slim — has bash; required for js_image_layer NestJS launcher scripts
+oci.pull(
+    name = "node_slim",
+    digest = "sha256:d8a35d586fad3af7abb6fdb9ba972388395405f4d462da9e4a4ddcde67b5e0fb",
+    image = "docker.io/library/node",
+    platforms = ["linux/amd64", "linux/arm64"],
+)
+
+# Python Distroless Base
+oci.pull(
+    name = "distroless_python",
+    digest = "sha256:72c0ee6f962df1ad412dc94d0cdf8a0e3197447235da79fa93b2f3e1ac4d2f4e", # Python 3.11
+    image = "gcr.io/distroless/python3-debian11",
+    platforms = ["linux/amd64", "linux/arm64"],
+)
+
+use_repo(oci, "distroless_nodejs", "distroless_python", "node_slim")

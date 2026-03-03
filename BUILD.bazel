@@ -4,3 +4,11 @@ npm_link_all_packages(name = "node_modules")
 
 # Export files so other targets can reference them
 exports_files([".env", "tsconfig.json"])
+
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+
+js_library(
+    name = "env",
+    srcs = [".env"],
+    visibility = ["//visibility:public"],
+)

@@ -1,5 +1,7 @@
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@pip//:requirements.bzl", "requirement")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,4 +38,27 @@ py_binary(
         requirement("langchain-google-genai"),
         requirement("email-validator"),
     ],
+)
+
+# 1. Package the Python binary into a tar layer
+pkg_tar(
+    name = "app_layer",
+    srcs = [":ai-service"],
+    include_runfiles = True,
+    strip_prefix = ".",
+)
+
+# 2. Inject the layer into the Distroless Python container
+oci_image(
+    name = "image",
+    base = "@distroless_python",
+    tars = [":app_layer"],
+    entrypoint = ["python3", "apps/ai-service/main.py"],
+)
+
+# 3. Create the Tarball for Docker runtime
+oci_tarball(
+    name = "tarball",
+    image = ":image",
+    repo_tags = ["knowledgehub/ai-service:latest"],
 )

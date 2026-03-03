@@ -1,5 +1,51 @@
-version: '3.7'
+# ============================================================
+# Knowledge Hub OS — Production Docker Compose
+# Built via: bazel run //apps/<service>:tarball
+# Standards: resource limits, health checks, network isolation,
+#            log rotation, graceful shutdown, node:20-slim base
+# ============================================================
+
+networks:
+  # Public-facing: frontend → gateway
+  frontend_net:
+    driver: bridge
+  # Internal microservices: gateway → services
+  backend_net:
+    driver: bridge
+  # Infrastructure only: services → kafka/redis
+  infra_net:
+    driver: bridge
+
+# ─────────────────────────────────────────────
+# SHARED LOGGING CONFIG (reused via YAML anchor)
+# ─────────────────────────────────────────────
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ─────────────────────────────────────────────
+# NODE.JS HEALTH CHECK (no curl in slim images)
+# Uses Node.js built-in http module — zero extra tools needed
+# ─────────────────────────────────────────────
+x-node-healthcheck: &node-healthcheck
+  test:
+    - "CMD"
+    - "node"
+    - "-e"
+    - "require('http').get({host:'localhost',port:process.env.PORT||3000,path:'/health',timeout:2000},r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
 services:
+
+  # ─────────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────────
+
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
     container_name: redpanda-broker
@@ -16,3 +62,233 @@ services:
     ports:
       - "9092:9092"
       - "29092:29092"
+    networks:
+      - infra_net
+    healthcheck:
+      test: [ "CMD", "rpk", "cluster", "info", "--brokers=localhost:9092" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1.2G
+          cpus: "1.0"
+    logging: *default-logging
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: knowledgehub-redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - infra_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+          cpus: "0.5"
+    logging: *default-logging
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # BACKEND MICROSERVICES
+  # ─────────────────────────────────────────────
+
+  auth-service:
+    image: knowledgehub/auth-service:latest
+    container_name: knowledgehub-auth
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      KAFKA_BROKER_URL: redpanda:29092
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_net
+      - infra_net
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get({host:'localhost',port:3001,path:'/auth/health',timeout:2000},r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging: *default-logging
+    restart: unless-stopped
+
+  goal-service:
+    image: knowledgehub/goal-service:latest
+    container_name: knowledgehub-goal
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      KAFKA_BROKER_URL: redpanda:29092
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_net
+      - infra_net
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get({host:'localhost',port:3002,path:'/health',timeout:2000},r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging: *default-logging
+    restart: unless-stopped
+
+  ai-service:
+    image: knowledgehub/ai-service:latest
+    container_name: knowledgehub-ai
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      KAFKA_BROKER_URL: redpanda:29092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - backend_net
+      - infra_net
+    healthcheck:
+      # Python/FastAPI: use wget (available in python:slim) or a simple TCP check via bash
+      test: [ "CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" 2>/dev/null && echo ok || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    logging: *default-logging
+    restart: unless-stopped
+
+  api-gateway:
+    image: knowledgehub/api-gateway:latest
+    container_name: knowledgehub-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      KAFKA_BROKER_URL: redpanda:29092
+      REDIS_URL: redis://redis:6379
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      goal-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      - frontend_net
+      - backend_net
+      - infra_net
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get({host:'localhost',port:3000,path:'/users/health',timeout:2000},r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging: *default-logging
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # FRONTEND
+  # ─────────────────────────────────────────────
+
+  frontend:
+    image: knowledgehub/frontend:latest
+    container_name: knowledgehub-frontend
+    ports:
+      - "4000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_GATEWAY_URL: http://api-gateway:3000
+      NEXT_PUBLIC_AUTH_URL: http://auth-service:3001
+      NEXT_PUBLIC_GOAL_SERVICE_URL: http://goal-service:3002
+      NEXT_PUBLIC_AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - frontend_net
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get({host:'localhost',port:3000,path:'/',timeout:2000},r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging: *default-logging
+    restart: unless-stopped

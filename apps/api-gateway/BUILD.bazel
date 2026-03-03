@@ -1,5 +1,6 @@
 load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
-load("@aspect_rules_js//js:defs.bzl", "js_binary")
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_image_layer")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,7 +45,30 @@ js_binary(
         "//:node_modules/pino-http",
         "//:node_modules/pino-pretty",
         "//libs/exceptions:exceptions_lib",
-        "//:.env",
+        "//:env",
     ],
     entry_point = "src/main.js",
+)
+
+# 1. Package the Node.js compiled binary into a tar layer
+js_image_layer(
+    name = "app_layer",
+    binary = ":api-gateway",
+    root = "/app",
+)
+
+# 2. Inject the layer into the Distroless container
+oci_image(
+    name = "image",
+    base = "@node_slim",
+    tars = [":app_layer"],
+    entrypoint = ["/app/apps/api-gateway/api-gateway"],
+    workdir = "/app",
+)
+
+# 3. Create the Tarball for Docker runtime
+oci_tarball(
+    name = "tarball",
+    image = ":image",
+    repo_tags = ["knowledgehub/api-gateway:latest"],
 )

@@ -4,6 +4,15 @@ import { PrismaService } from '../../../libs/database/src/prisma.service';
 import { JwtAuthGuard } from '../../../libs/security/src/jwt-auth.guard';
 import * as crypto from 'crypto';
 
+// Public health endpoint (no auth guard)
+@Controller()
+export class HealthController {
+    @Get('health')
+    health() {
+        return { status: 'ok', service: 'goal-service', timestamp: new Date().toISOString() };
+    }
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('goals')
 export class GoalController implements OnModuleInit {

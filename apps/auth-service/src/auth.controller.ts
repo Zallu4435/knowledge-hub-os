@@ -1,10 +1,15 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../../../libs/security/src/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
     constructor(private authService: AuthService) { }
+
+    @Get('health')
+    health() {
+        return { status: 'ok', service: 'auth-service', timestamp: new Date().toISOString() };
+    }
 
     @Post('register')
     register(@Body() body: Record<string, any>) {

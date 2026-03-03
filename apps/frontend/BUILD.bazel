@@ -1,7 +1,10 @@
 load("@aspect_rules_js//js:defs.bzl", "js_binary")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 package(default_visibility = ["//visibility:public"])
 
+# ---- DEV SERVER ----
 js_binary(
     name = "dev",
     data = glob([
@@ -23,3 +26,66 @@ js_binary(
     args = ["dev", "apps/frontend", "-p", "4000"],
     chdir = "apps/frontend", # Run the command from inside the frontend folder
 )
+
+# ---- PRODUCTION BUILD ----
+
+# 1. Run 'next build' via genrule shell — produces .next/standalone
+genrule(
+    name = "next_build",
+    srcs = glob([
+        "app/**",
+        "components/**",
+        "lib/**",
+        "public/**",
+        "*.json",
+        "*.js",
+        "*.ts",
+        "*.css",
+    ]),
+    outs = ["standalone.tar"],
+    cmd = """
+        # Store execroot path before cd
+        EXECROOT=$$PWD
+
+        # next build runs from apps/frontend inside execroot
+        cd apps/frontend && NODE_ENV=production ../../node_modules/.bin/next build
+
+        # Return to execroot
+        cd $$EXECROOT
+        mkdir -p $$(dirname $(OUTS))
+
+        # Copy static assets into the correct monorepo standalone subpath
+        mkdir -p apps/frontend/.next/standalone/apps/frontend/.next
+        cp -r apps/frontend/.next/static apps/frontend/.next/standalone/apps/frontend/.next/static 2>/dev/null || true
+        cp -r apps/frontend/public apps/frontend/.next/standalone/apps/frontend/public 2>/dev/null || true
+
+        # Tar the complete standalone output
+        tar -cf $(OUTS) -C apps/frontend/.next/standalone .
+    """,
+    local = True,
+)
+
+# 2. Package the standalone output as a proper OCI layer
+pkg_tar(
+    name = "app_layer",
+    deps = [":next_build"],
+    package_dir = "/app",
+)
+
+# 3. Inject into node:20-slim — has bash + node at /usr/local/bin/node
+oci_image(
+    name = "image",
+    base = "@node_slim",
+    tars = [":app_layer"],
+    entrypoint = ["node", "/app/apps/frontend/server.js"],
+    env = {"NODE_ENV": "production", "PORT": "3000", "HOSTNAME": "0.0.0.0"},
+    workdir = "/app",
+)
+
+# 4. Create the Tarball for Docker runtime
+oci_tarball(
+    name = "tarball",
+    image = ":image",
+    repo_tags = ["knowledgehub/frontend:latest"],
+)
+

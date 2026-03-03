@@ -242,6 +242,8 @@ sqlalchemy==2.0.47
     #   langchain-community
 starlette==0.36.3
     # via fastapi
+structlog==24.4.0
+    # via -r apps/ai-service/requirements.in
 tenacity==8.5.0
     # via
     #   langchain

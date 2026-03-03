@@ -134,6 +134,10 @@ class ChatRequest(BaseModel):
 # HTTP Endpoints
 # =============================================================================
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "ai-service", "timestamp": __import__("datetime").datetime.utcnow().isoformat()}
+
 @app.get("/insights")
 async def get_insights(user_id: str = Depends(verify_token)):
     cursor = insights_collection.find({"userId": user_id}).sort("processed_at", -1).limit(20)

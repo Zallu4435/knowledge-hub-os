@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { LoggerModule } from 'nestjs-pino';
-import { GoalController } from './goal.controller';
+import { GoalController, HealthController } from './goal.controller';
 import { PrismaService } from '../../../libs/database/src/prisma.service';
 import { RedisService } from '../../../libs/security/src/redis.service';
 
@@ -36,7 +36,7 @@ import { RedisService } from '../../../libs/security/src/redis.service';
             },
         }]),
     ],
-    controllers: [GoalController],
+    controllers: [HealthController, GoalController],
     providers: [PrismaService, RedisService],
 })
 export class GoalModule { }
