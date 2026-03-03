@@ -20,6 +20,9 @@ ts_project(
         "//libs/database:database_lib",
         "//:node_modules/@nestjs/microservices",
         "//libs/event_schemas:ts_contracts",
+        "//:node_modules/@nestjs/config",
+        "//:node_modules/nestjs-pino",
+        "//libs/exceptions:exceptions_lib",
     ],
 )
 
@@ -35,9 +38,13 @@ js_binary(
         "//:node_modules/@prisma/client",
         "//:node_modules/@nestjs/microservices",
         "//libs/event_schemas:ts_contracts",
+        "//:node_modules/@nestjs/config",
+        "//:node_modules/nestjs-pino",
+        "//:node_modules/pino",
+        "//:node_modules/pino-http",
+        "//:node_modules/pino-pretty",
+        "//libs/exceptions:exceptions_lib",
+        "//:.env",
     ],
     entry_point = "src/main.js",
-    env = {
-        "DATABASE_URL": "postgresql://neondb_owner:npg_qKAGa3H1PbvU@ep-curly-mode-aieehupq-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
-    },
 )

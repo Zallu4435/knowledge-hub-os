@@ -3,15 +3,13 @@ load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 package(default_visibility = ["//visibility:public"])
 
 ts_project(
-    name = "security_lib",
-    srcs = ["src/jwt-auth.guard.ts", "src/redis.service.ts"],
+    name = "exceptions_lib",
+    srcs = ["src/global-exception.filter.ts"],
     tsconfig = "tsconfig.json",
     declaration = True,
     transpiler = "tsc",
     deps = [
         "//:node_modules/@nestjs/common",
-        "//:node_modules/@nestjs/jwt",
         "//:node_modules/@types/express",
-        "//:node_modules/ioredis",
     ],
 )

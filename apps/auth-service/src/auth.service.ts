@@ -1,17 +1,28 @@
-import { Injectable, UnauthorizedException, ConflictException, Inject, OnModuleInit } from '@nestjs/common';
+import {
+    Injectable,
+    UnauthorizedException,
+    ConflictException,
+    Inject,
+    OnModuleInit,
+    Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ClientKafka } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../../libs/database/src/prisma.service';
 import { UserCreatedEvent } from '../../../libs/event_schemas/UserCreatedEvent';
+import { RedisService } from '../../../libs/security/src/redis.service';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
+    private readonly logger = new Logger(AuthService.name);
+
     constructor(
         private prisma: PrismaService,
         private jwtService: JwtService,
-        @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka // Inject Kafka
+        private redisService: RedisService,
+        @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka,
     ) { }
 
     async onModuleInit() {
@@ -37,17 +48,17 @@ export class AuthService implements OnModuleInit {
                 userId: user.id,
                 email: user.email,
                 role: user.role,
-            }
+            },
         };
 
-        // Fire it to Kafka!
+        // Emit to Kafka
         this.kafkaClient.emit('user.events', eventPayload);
-        console.log(`📢 Auth Service emitted UserCreatedEvent for: ${user.email}`);
+        this.logger.log(`📢 Auth Service emitted UserCreatedEvent for: ${user.email}`);
 
         const payload = { sub: user.id, email: user.email, role: user.role };
         return {
             access_token: await this.jwtService.signAsync(payload),
-            user: { id: user.id, email: user.email, role: user.role }
+            user: { id: user.id, email: user.email, role: user.role },
         };
     }
 
@@ -65,7 +76,30 @@ export class AuthService implements OnModuleInit {
         const payload = { sub: user.id, email: user.email, role: user.role };
         return {
             access_token: await this.jwtService.signAsync(payload),
-            user: { id: user.id, email: user.email, role: user.role }
+            user: { id: user.id, email: user.email, role: user.role },
         };
+    }
+
+    /**
+     * Logout: extract the raw token from the Authorization header and add it to
+     * the Redis blacklist with a TTL matching its remaining validity time.
+     */
+    async logout(req: any): Promise<{ message: string }> {
+        const authHeader: string = req.headers?.authorization || '';
+        const token = authHeader.replace('Bearer ', '').trim();
+
+        if (!token) {
+            throw new UnauthorizedException('No token provided');
+        }
+
+        // Decode without verifying (already verified by JwtAuthGuard)
+        const decoded: any = this.jwtService.decode(token);
+        const now = Math.floor(Date.now() / 1000);
+        const ttl = decoded?.exp ? decoded.exp - now : 86400; // fallback 24h
+
+        await this.redisService.blacklistToken(token, ttl > 0 ? ttl : 1);
+        this.logger.log(`🔒 Token blacklisted for user: ${decoded?.sub}`);
+
+        return { message: 'Logged out successfully. Token has been revoked.' };
     }
 }

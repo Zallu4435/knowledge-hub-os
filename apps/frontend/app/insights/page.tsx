@@ -16,7 +16,8 @@ export default async function InsightsPage() {
         }
 
         // 2. Attach it to the FastAPI request
-        const res = await fetch("http://localhost:8000/insights", {
+        const aiServiceUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000';
+        const res = await fetch(`${aiServiceUrl}/insights`, {
             cache: 'no-store',
             headers: {
                 'Authorization': `Bearer ${token}`, // 🔒 Secure payload!

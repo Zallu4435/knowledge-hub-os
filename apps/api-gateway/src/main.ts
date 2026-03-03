@@ -1,19 +1,37 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from '../../../libs/exceptions/src/global-exception.filter';
+import { Logger } from 'nestjs-pino';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  // Enable CORS so the Next.js frontend can communicate with the API
+  // Use Pino structured logger
+  app.useLogger(app.get(Logger));
+
+  // Dynamic CORS from environment
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:4000')
+    .split(',')
+    .map((o) => o.trim());
+
   app.enableCors({
-    origin: 'http://localhost:4000', // Only allow our Next.js app
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (e.g., server-to-server, curl)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: Origin '${origin}' not allowed`));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
 
-  const port = process.env.PORT || 3000;
+  // Apply global exception filter for standardized error responses
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  const port = process.env.PORT_API_GATEWAY || process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`🚀 API Gateway is running on: http://localhost:${port}`);
+  app.get(Logger).log(`🚀 API Gateway is running on: http://localhost:${port}`);
 }
 bootstrap();
-
