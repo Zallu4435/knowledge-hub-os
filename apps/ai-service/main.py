@@ -54,7 +54,7 @@ structlog.configure(
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
+    logger_factory=structlog.stdlib.LoggerFactory(),
 )
 log = structlog.get_logger(service_name="ai-service")
 
