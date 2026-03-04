@@ -21,9 +21,9 @@ RUN pnpm exec tsc \
     --baseUrl . \
     --skipLibCheck
 
-RUN cp libs/database/schema.prisma dist/libs/database/ || true && \
-    cp libs/database/src/generated/*.node dist/libs/database/src/generated/ || true && \
-    cp libs/database/src/generated/schema.prisma dist/libs/database/src/generated/ || true
+RUN mkdir -p dist/libs/database/src/generated && \
+    cp libs/database/schema.prisma dist/libs/database/ || true && \
+    cp -r libs/database/src/generated/* dist/libs/database/src/generated/ || true
 
 # ── Runtime ────────────────────────────────────────────────
 FROM node:20-slim

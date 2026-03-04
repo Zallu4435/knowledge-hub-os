@@ -278,3 +278,7 @@ uvicorn==0.27.1
     # via -r apps/ai-service/requirements.in
 yarl==1.22.0
     # via aiohttp
+prometheus-fastapi-instrumentator==7.0.0
+opentelemetry-sdk==1.25.0
+opentelemetry-exporter-otlp-proto-http==1.25.0
+opentelemetry-instrumentation-fastapi==0.46b0
