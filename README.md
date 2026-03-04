@@ -380,6 +380,7 @@ git push main
 - [x] **Observability** — OpenTelemetry · Prometheus · Grafana · Jaeger
 - [x] **CI/CD** — GitHub Actions (test → build → push → deploy)
 - [x] **Free cloud deployment** — Vercel + Render + Upstash (zero cost)
+- [x] **Modern UI/UX Overhaul** — Glassmorphism, real-time validation, and polished empty states
 
 ---
 

@@ -109,11 +109,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 # =============================================================================
 _otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 _service_name = os.getenv("OTEL_SERVICE_NAME", "ai-service")
+_otel_exporter_type = os.getenv("OTEL_TRACES_EXPORTER", "otlp")
 
 _otel_resource = Resource(attributes={"service.name": _service_name})
 _tracer_provider = TracerProvider(resource=_otel_resource)
-_otlp_exporter = OTLPSpanExporter(endpoint=f"{_otel_endpoint}/v1/traces")
-_tracer_provider.add_span_processor(BatchSpanProcessor(_otlp_exporter))
+
+# Only attach the exporter if it's not explicitly disabled
+if _otel_exporter_type.lower() != "none":
+    _otlp_exporter = OTLPSpanExporter(endpoint=f"{_otel_endpoint}/v1/traces")
+    _tracer_provider.add_span_processor(BatchSpanProcessor(_otlp_exporter))
+
 trace.set_tracer_provider(_tracer_provider)
 tracer = trace.get_tracer(__name__)
 
