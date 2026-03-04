@@ -63,19 +63,26 @@ export default function RegisterPage() {
             // NextProxy inherently issued the HttpOnly token invisibly, so bypass client-storage
 
             // Redirect to the dashboard!
-            router.push("/dashboard");
+            router.replace("/dashboard");
         } catch (err: any) {
             setStatus("error");
 
+            // 409 = email already in use
+            if (err.status === 409 || err.response?.status === 409) {
+                setErrors(prev => ({ ...prev, email: "This email address is already registered." }));
+                setGlobalError("An account with this email already exists.");
+                return;
+            }
+
             // Handle structured backend validation errors (e.g. class-validator arrays)
-            if (err.response?.data?.message && Array.isArray(err.response.data.message)) {
-                setGlobalError("Please fix the errors below.");
+            const rawMsg = err.response?.data?.message;
+            if (rawMsg && Array.isArray(rawMsg)) {
                 const backendErrors: ValidationErrors = {};
-                err.response.data.message.forEach((msg: string) => {
+                rawMsg.forEach((msg: string) => {
                     if (msg.toLowerCase().includes("email")) backendErrors.email = msg;
                     else if (msg.toLowerCase().includes("password")) backendErrors.password = msg;
                     else if (msg.toLowerCase().includes("role")) backendErrors.role = msg;
-                    else setGlobalError(msg); // Fallback to global if field unidentifiable
+                    else setGlobalError(msg);
                 });
                 setErrors(prev => ({ ...prev, ...backendErrors }));
             } else {

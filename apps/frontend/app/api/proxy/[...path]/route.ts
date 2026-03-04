@@ -130,6 +130,14 @@ async function handleProxy(req: NextRequest) {
             }
         }
 
+        // 🔒 If upstream returns 401 on a protected route → clear the stale/revoked cookie
+        // This keeps the browser session in sync with the Redis blacklist on the backend.
+        const isAuthRoute = service === "auth" &&
+            (pathSegments[1] === "login" || pathSegments[1] === "register");
+        if (response.status === 401 && !isAuthRoute) {
+            proxyResponse.cookies.delete("kh_os_token");
+        }
+
         return proxyResponse;
     } catch {
         return NextResponse.json({ error: "Upstream service proxy failed" }, { status: 502 });

@@ -54,22 +54,28 @@ export default function LoginPage() {
             // Proxy automatically injected HttpOnly session cookie into the browser securely
 
             // Redirect to the dashboard!
-            router.push("/dashboard");
+            router.replace("/dashboard");
         } catch (err: any) {
             setStatus("error");
 
+            // 401 = wrong credentials — show a direct, clean message without refreshing
+            if (err.status === 401 || err.response?.status === 401) {
+                setGlobalError("Incorrect email or password. Please try again.");
+                return;
+            }
+
             // Handle structured backend validation errors (e.g. class-validator arrays)
-            if (err.response?.data?.message && Array.isArray(err.response.data.message)) {
-                setGlobalError("Please fix the errors below.");
+            const rawMsg = err.response?.data?.message;
+            if (rawMsg && Array.isArray(rawMsg)) {
                 const backendErrors: ValidationErrors = {};
-                err.response.data.message.forEach((msg: string) => {
+                rawMsg.forEach((msg: string) => {
                     if (msg.toLowerCase().includes("email")) backendErrors.email = msg;
                     else if (msg.toLowerCase().includes("password")) backendErrors.password = msg;
-                    else setGlobalError(msg); // Fallback to global if field unidentifiable
+                    else setGlobalError(msg);
                 });
                 setErrors(prev => ({ ...prev, ...backendErrors }));
             } else {
-                setGlobalError(err.message || "Invalid email or password");
+                setGlobalError(err.message || "An unexpected error occurred. Please try again.");
             }
         }
     };
