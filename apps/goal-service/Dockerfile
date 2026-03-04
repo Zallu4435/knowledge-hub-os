@@ -12,8 +12,7 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY libs/ ./libs/
 COPY apps/goal-service/ ./apps/goal-service/
-COPY prisma/ ./prisma/
-RUN pnpm exec prisma generate
+RUN pnpm exec prisma generate --schema=libs/database/schema.prisma
 
 RUN pnpm exec tsc \
     --project apps/goal-service/tsconfig.json \
@@ -22,13 +21,16 @@ RUN pnpm exec tsc \
     --baseUrl . \
     --skipLibCheck
 
+RUN cp libs/database/schema.prisma dist/libs/database/ || true && \
+    cp libs/database/src/generated/*.node dist/libs/database/src/generated/ || true && \
+    cp libs/database/src/generated/schema.prisma dist/libs/database/src/generated/ || true
+
 # ── Runtime ────────────────────────────────────────────────
 FROM node:20-slim
 WORKDIR /app
 
 COPY --from=builder /workspace/node_modules ./node_modules
 COPY --from=builder /workspace/dist ./dist
-COPY --from=builder /workspace/prisma ./prisma
 COPY --from=builder /workspace/package.json ./
 
 EXPOSE 3002

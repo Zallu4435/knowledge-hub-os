@@ -15,10 +15,9 @@ COPY tsconfig.json ./
 COPY libs/ ./libs/
 COPY apps/api-gateway/ ./apps/api-gateway/
 
-# Copy Prisma schema and generate client
+# Generate Prisma client using the correct schema path
 # DATABASE_URL is not needed at build time for generate
-COPY prisma/ ./prisma/
-RUN pnpm exec prisma generate
+RUN pnpm exec prisma generate --schema=libs/database/schema.prisma
 
 # Compile TypeScript from monorepo root so relative imports
 # (../../../libs/...) resolve correctly in the output tree
@@ -29,13 +28,17 @@ RUN pnpm exec tsc \
     --baseUrl . \
     --skipLibCheck
 
+# Ensure Prisma engines (.node/schema) are available in the transpile output directory
+RUN cp libs/database/schema.prisma dist/libs/database/ || true && \
+    cp libs/database/src/generated/*.node dist/libs/database/src/generated/ || true && \
+    cp libs/database/src/generated/schema.prisma dist/libs/database/src/generated/ || true
+
 # ── Runtime ────────────────────────────────────────────────
 FROM node:20-slim
 WORKDIR /app
 
 COPY --from=builder /workspace/node_modules ./node_modules
 COPY --from=builder /workspace/dist ./dist
-COPY --from=builder /workspace/prisma ./prisma
 COPY --from=builder /workspace/package.json ./
 
 # Render injects PORT; the service listens on process.env.PORT
